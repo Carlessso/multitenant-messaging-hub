@@ -6,3 +6,55 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum Channel {
+  whatsapp
+  instagram
+}
+
+enum Direction {
+  inbound
+  outbound
+}
+
+model Tenant {
+  id            String         @id
+  name          String
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  conversations Conversation[]
+  messages      Message[]
+
+  @@map("tenants")
+}
+
+model Conversation {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  tenantId    String    @map("tenant_id")
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  channel     Channel
+  contactId   String    @map("contact_id")
+  contactName String?   @map("contact_name")
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  messages    Message[]
+
+  @@unique([tenantId, channel, contactId])
+  @@map("conversations")
+}
+
+model Message {
+  id             String       @id @default(uuid(7)) @db.Uuid
+  tenantId       String       @map("tenant_id")
+  tenant         Tenant       @relation(fields: [tenantId], references: [id])
+  conversationId String       @map("conversation_id") @db.Uuid
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  externalId     String?      @map("external_id")
+  direction      Direction
+  text           String
+  sentAt         DateTime     @map("sent_at") @db.Timestamptz(3)
+  receivedAt     DateTime     @default(now()) @map("received_at") @db.Timestamptz(3)
+
+  @@unique([tenantId, externalId])
+  @@index([tenantId, receivedAt])
+  @@map("messages")
+}
