@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import type { FastifyInstance } from 'fastify';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../app.js';
 import type { PrismaClient } from '../../generated/prisma/client.js';
 import { createPrismaClient } from '../../shared/database/prisma.js';
@@ -29,6 +29,12 @@ beforeAll(async () => {
 
   app = buildApp({ databaseUrl, logger: false });
 }, 60_000);
+
+beforeEach(async () => {
+  await prisma.message.deleteMany();
+  await prisma.conversation.deleteMany();
+  await prisma.tenant.deleteMany();
+});
 
 afterAll(async () => {
   await prisma.$disconnect();
@@ -75,24 +81,24 @@ describe('POST /webhooks/:tenantId', () => {
   it('does not duplicate a redelivered message', async () => {
     await prisma.tenant.create({
       data: {
-        id: 'tenant-dup',
+        id: 'loja-x',
         name: 'Tenant dup',
       },
     });
 
     const responseOne = await app.inject({
       method: 'POST',
-      url: '/webhooks/tenant-dup',
+      url: '/webhooks/loja-x',
       payload: validPayload,
     });
 
     const responseTwo = await app.inject({
       method: 'POST',
-      url: '/webhooks/tenant-dup',
+      url: '/webhooks/loja-x',
       payload: validPayload,
     });
 
-    const count = await prisma.message.count({ where: { tenantId: 'tenant-dup' } });
+    const count = await prisma.message.count({ where: { tenantId: 'loja-x' } });
 
     expect(responseOne.statusCode).toBe(202);
     expect(responseTwo.statusCode).toBe(202);
