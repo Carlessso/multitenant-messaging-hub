@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { hasZodFastifySchemaValidationErrors } from 'fastify-type-provider-zod';
+import { AppError } from './errors.js';
 
 export function registerErrorHandlers(app: FastifyInstance): void {
   app.setNotFoundHandler(async (request, reply) => {
@@ -24,6 +25,17 @@ export function registerErrorHandlers(app: FastifyInstance): void {
             path: `${error.validationContext}${issue.instancePath.replaceAll('/', '.')}`,
             message: issue.message,
           })),
+          requestId: request.id,
+        },
+      };
+    }
+
+    if (error instanceof AppError) {
+      reply.code(error.statusCode);
+      return {
+        error: {
+          code: error.code,
+          message: error.message,
           requestId: request.id,
         },
       };

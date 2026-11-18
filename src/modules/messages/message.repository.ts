@@ -1,4 +1,4 @@
-import type { PrismaClient } from '../../generated/prisma/client.js';
+import { Prisma, type PrismaClient } from '../../generated/prisma/client.js';
 import type { Message } from './message.types.js';
 
 export interface MessageRepository {
@@ -43,18 +43,25 @@ export class PrismaMessageRepository implements MessageRepository {
       },
     });
 
-    await this.prisma.message.create({
-      data: {
-        id: message.id,
-        tenantId: message.tenantId,
-        conversationId: conversation.id,
-        externalId: message.externalId,
-        direction: message.direction,
-        text: message.text,
-        sentAt: message.sentAt,
-        receivedAt: message.receivedAt,
-      },
-    });
+    try {
+      await this.prisma.message.create({
+        data: {
+          id: message.id,
+          tenantId: message.tenantId,
+          conversationId: conversation.id,
+          externalId: message.externalId,
+          direction: message.direction,
+          text: message.text,
+          sentAt: message.sentAt,
+          receivedAt: message.receivedAt,
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        return; // already saved: duplicate delivery, nothing to do
+      }
+      throw error;
+    }
   }
 
   async listByTenant(tenantId: string): Promise<Message[]> {
