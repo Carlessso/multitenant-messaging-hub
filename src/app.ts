@@ -26,7 +26,7 @@ export function buildApp(): FastifyInstance {
   const tenantRepository = new PrismaTenantRepository(prisma);
 
   app.register(webhookRoutes, { prefix: '/webhooks', tenantRepository, messageRepository });
-  app.register(messageRoutes, { prefix: '/tenants', messageRepository });
+  app.register(messageRoutes, { prefix: '/tenants', messageRepository, tenantRepository });
 
   app.get('/health', async () => {
     return { status: 'ok' };
