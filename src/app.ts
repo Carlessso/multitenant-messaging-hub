@@ -6,17 +6,21 @@ import { messageRoutes } from './modules/messages/message.routes.js';
 import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 import { registerErrorHandlers } from './shared/http/error-handler.js';
 import { createPrismaClient } from './shared/database/prisma.js';
-import { env } from './config/env.js';
 import { PrismaTenantRepository } from './modules/tenants/tenant.repository.js';
 
-export function buildApp(): FastifyInstance {
-  const app = Fastify({ logger: true });
+export interface AppOptions {
+  databaseUrl: string;
+  logger?: boolean;
+}
+
+export function buildApp(options: AppOptions): FastifyInstance {
+  const app = Fastify({ logger: options.logger ?? true });
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   registerErrorHandlers(app);
 
-  const prisma = createPrismaClient(env.DATABASE_URL);
+  const prisma = createPrismaClient(options.databaseUrl);
 
   app.addHook('onClose', async () => {
     await prisma.$disconnect();

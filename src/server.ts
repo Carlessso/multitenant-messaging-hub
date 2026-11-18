@@ -1,7 +1,12 @@
-import { buildApp } from './app.js';
+import { buildApp, type AppOptions } from './app.js';
 import { env } from './config/env.js';
 
-const app = buildApp();
+const options: AppOptions = {
+  databaseUrl: env.DATABASE_URL,
+  logger: true,
+};
+
+const app = buildApp(options);
 
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
   app.log.info({ signal }, 'shutting down');
