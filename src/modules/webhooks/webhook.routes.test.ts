@@ -3,9 +3,13 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testconta
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../../app.js';
+import type { PrismaClient } from '../../generated/prisma/client.js';
+import { createPrismaClient } from '../../shared/database/prisma.js';
+import { PrismaMessageRepository } from '../messages/message.repository.js';
 
 let container: StartedPostgreSqlContainer;
 let app: FastifyInstance;
+let prisma: PrismaClient;
 
 const validPayload = {
   externalId: 'wamid.HBgLNTUxMTk5OTk5OTk5FQIAERgSQzRBMjE2',
@@ -18,6 +22,7 @@ const validPayload = {
 beforeAll(async () => {
   container = await new PostgreSqlContainer('postgres:18-alpine').start();
   const databaseUrl = container.getConnectionUri();
+  prisma = createPrismaClient(databaseUrl);
 
   execFileSync('npx', ['prisma', 'migrate', 'deploy'], {
     env: { ...process.env, DATABASE_URL: databaseUrl },
@@ -27,6 +32,7 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
+  await prisma.$disconnect();
   await app.close();
   await container.stop();
 });
@@ -43,5 +49,27 @@ describe('POST /webhooks/:tenantId', () => {
     expect(response.json()).toMatchObject({
       error: { code: 'TENANT_NOT_FOUND' },
     });
+  });
+
+  it('persists the message and returns 202', async () => {
+    await prisma.tenant.create({
+      data: {
+        id: 'loja-x',
+        name: 'Loja X',
+      },
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/webhooks/loja-x',
+      payload: validPayload,
+    });
+
+    const messages = await prisma.message.findMany({ where: { tenantId: 'loja-x' } });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toEqual({ received: true });
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.text).toBe(validPayload.text);
   });
 });
