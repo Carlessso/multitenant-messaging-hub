@@ -1,8 +1,9 @@
 import { z } from 'zod';
+import { channelSchema } from '../../shared/channel.schema.js';
 
 export const webhookMessageSchema = z.object({
   externalId: z.string().min(1).max(255),
-  channel: z.enum(['whatsapp', 'instagram']),
+  channel: channelSchema,
   from: z.object({
     id: z.string().min(1).max(100),
     name: z.string().max(255).optional(),
