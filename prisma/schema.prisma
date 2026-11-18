@@ -10,11 +10,15 @@ datasource db {
 enum Channel {
   whatsapp
   instagram
+
+  @@map("channel")
 }
 
 enum Direction {
   inbound
   outbound
+
+  @@map("direction")
 }
 
 model Tenant {
