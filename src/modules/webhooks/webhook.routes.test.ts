@@ -5,7 +5,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../../app.js';
 import type { PrismaClient } from '../../generated/prisma/client.js';
 import { createPrismaClient } from '../../shared/database/prisma.js';
-import { PrismaMessageRepository } from '../messages/message.repository.js';
 
 let container: StartedPostgreSqlContainer;
 let app: FastifyInstance;
@@ -71,5 +70,32 @@ describe('POST /webhooks/:tenantId', () => {
     expect(response.json()).toEqual({ received: true });
     expect(messages).toHaveLength(1);
     expect(messages[0]?.text).toBe(validPayload.text);
+  });
+
+  it('does not duplicate a redelivered message', async () => {
+    await prisma.tenant.create({
+      data: {
+        id: 'tenant-dup',
+        name: 'Tenant dup',
+      },
+    });
+
+    const responseOne = await app.inject({
+      method: 'POST',
+      url: '/webhooks/tenant-dup',
+      payload: validPayload,
+    });
+
+    const responseTwo = await app.inject({
+      method: 'POST',
+      url: '/webhooks/tenant-dup',
+      payload: validPayload,
+    });
+
+    const count = await prisma.message.count({ where: { tenantId: 'tenant-dup' } });
+
+    expect(responseOne.statusCode).toBe(202);
+    expect(responseTwo.statusCode).toBe(202);
+    expect(count).toBe(1);
   });
 });
