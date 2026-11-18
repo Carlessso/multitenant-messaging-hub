@@ -5,6 +5,8 @@ import { InMemoryMessageRepository } from './modules/messages/message.repository
 import { messageRoutes } from './modules/messages/message.routes.js';
 import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 import { registerErrorHandlers } from './shared/http/error-handler.js';
+import { createPrismaClient } from './shared/database/prisma.js';
+import { env } from './config/env.js';
 
 export function buildApp(): FastifyInstance {
   const app = Fastify({ logger: true });
@@ -12,6 +14,12 @@ export function buildApp(): FastifyInstance {
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   registerErrorHandlers(app);
+
+  const prisma = createPrismaClient(env.DATABASE_URL);
+
+  app.addHook('onClose', async () => {
+    await prisma.$disconnect();
+  });
 
   const messageRepository = new InMemoryMessageRepository();
 
