@@ -163,7 +163,7 @@ npm run test:watch    # watch mode
 - [x] Project setup: TypeScript strict, ESM, Fastify, ESLint, Prettier
 - [x] Webhook and messages endpoints with Zod validation and a standard error format
 - [x] PostgreSQL + Prisma + Docker Compose, idempotent message storage
-- [ ] Tests with Vitest + Testcontainers _(in progress)_
+- [x] Tests with Vitest + Testcontainers
 - [ ] BullMQ queue: async processing with retry, idempotency and dead-letter
 - [ ] `LLMProvider` interface (Gemini + mock) with the auto-reply streamed via SSE
 - [ ] Per-tenant API key auth, structured logs, metrics and CI on GitHub Actions
