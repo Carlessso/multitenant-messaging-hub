@@ -18,7 +18,9 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "dev:worker": "tsx watch --env-file=.env src/worker.ts | pino-pretty",
+    "start:worker": "node dist/worker.js"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",
@@ -28,6 +30,7 @@
     "fastify-type-provider-zod": "^7.0.0",
     "ioredis": "^6.0.0",
     "pg": "^8.23.1",
+    "pino": "^10.4.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
