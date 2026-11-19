@@ -3,10 +3,12 @@ import { PrismaMessageRepository } from './modules/messages/message.repository.j
 import { createPrismaClient } from './shared/database/prisma.js';
 import { env } from './config/env.js';
 import {
+  INCOMING_MESSAGES_DLQ,
   INCOMING_MESSAGES_QUEUE,
+  type DeadLetterJob,
   type IncomingMessageJob,
 } from './modules/messages/message.queue.js';
-import { UnrecoverableError, Worker } from 'bullmq';
+import { Queue, UnrecoverableError, Worker, type Job } from 'bullmq';
 import { processIncomingMessage } from './modules/messages/process-incoming-message.js';
 import { PermanentJobError } from './shared/jobs/errors.js';
 
@@ -15,6 +17,32 @@ const logger = pino();
 const prisma = createPrismaClient(env.DATABASE_URL);
 
 const messageRepository = new PrismaMessageRepository(prisma);
+
+const deadLetterQueue = new Queue<DeadLetterJob>(INCOMING_MESSAGES_DLQ, {
+  connection: { url: env.REDIS_URL },
+});
+
+function isFinalFailure(job: Job<IncomingMessageJob>, err: Error): boolean {
+  return err instanceof UnrecoverableError || job.attemptsMade >= (job.opts.attempts ?? 1);
+}
+
+async function moveToDeadLetter(job: Job<IncomingMessageJob>, err: Error): Promise<void> {
+  try {
+    await deadLetterQueue.add(
+      'dead-letter',
+      {
+        ...job.data,
+        originalJobId: job.id,
+        failedReason: err.message,
+        attemptsMade: job.attemptsMade,
+      },
+      { jobId: job.id },
+    );
+    logger.warn({ jobId: job.id }, 'job moved to dead-letter queue');
+  } catch (dlqErr) {
+    logger.error({ jobId: job.id, err: dlqErr }, 'failed to move job to dead-letter queue');
+  }
+}
 
 const worker = new Worker<IncomingMessageJob>(
   INCOMING_MESSAGES_QUEUE,
@@ -40,6 +68,10 @@ worker.on('failed', (job, err) => {
     { jobId: job?.id, attempt: job?.attemptsMade, maxAttempts: job?.opts.attempts, err },
     'job failed',
   );
+
+  if (job && isFinalFailure(job, err)) {
+    void moveToDeadLetter(job, err);
+  }
 });
 
 worker.on('error', (err) => {
@@ -51,6 +83,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
 
   try {
     await worker.close();
+    await deadLetterQueue.close();
     await prisma.$disconnect();
     process.exit(0);
   } catch (err) {

@@ -7,6 +7,14 @@ export interface IncomingMessageJob {
   externalId: string;
 }
 
+export const INCOMING_MESSAGES_DLQ = 'incoming-messages-dlq';
+
+export interface DeadLetterJob extends IncomingMessageJob {
+  originalJobId?: string;
+  failedReason: string;
+  attemptsMade: number;
+}
+
 export interface MessageQueue {
   enqueue(job: IncomingMessageJob): Promise<void>;
   close(): Promise<void>;
