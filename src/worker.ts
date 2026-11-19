@@ -6,8 +6,9 @@ import {
   INCOMING_MESSAGES_QUEUE,
   type IncomingMessageJob,
 } from './modules/messages/message.queue.js';
-import { Worker } from 'bullmq';
+import { UnrecoverableError, Worker } from 'bullmq';
 import { processIncomingMessage } from './modules/messages/process-incoming-message.js';
+import { PermanentJobError } from './shared/jobs/errors.js';
 
 const logger = pino();
 
@@ -18,7 +19,14 @@ const messageRepository = new PrismaMessageRepository(prisma);
 const worker = new Worker<IncomingMessageJob>(
   INCOMING_MESSAGES_QUEUE,
   async (job) => {
-    await processIncomingMessage(job.data, { messageRepository });
+    try {
+      await processIncomingMessage(job.data, { messageRepository });
+    } catch (err) {
+      if (err instanceof PermanentJobError) {
+        throw new UnrecoverableError(err.message);
+      }
+      throw err;
+    }
   },
   { connection: { url: env.REDIS_URL } },
 );

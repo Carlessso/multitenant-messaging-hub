@@ -4,6 +4,7 @@ import { PrismaMessageRepository } from './message.repository.js';
 import { processIncomingMessage } from './process-incoming-message.js';
 import type { Message } from './message.types.js';
 import type { IncomingMessageJob } from './message.queue.js';
+import { PermanentJobError } from '../../shared/jobs/errors.js';
 
 let db: TestDatabase;
 let repo: PrismaMessageRepository;
@@ -99,7 +100,7 @@ describe('process incoming messages', () => {
     const newJob = { ...job, externalId: 'safdsadfsa' };
 
     await expect(processIncomingMessage(newJob, { messageRepository: repo })).rejects.toThrow(
-      'not found',
+      PermanentJobError,
     );
   });
 });

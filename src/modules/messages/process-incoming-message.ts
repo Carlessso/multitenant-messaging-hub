@@ -1,3 +1,4 @@
+import { PermanentJobError } from '../../shared/jobs/errors.js';
 import type { IncomingMessageJob } from './message.queue.js';
 import type { MessageRepository } from './message.repository.js';
 import type { Message } from './message.types.js';
@@ -16,7 +17,7 @@ export async function processIncomingMessage(
   );
 
   if (!inboundMessage) {
-    throw new Error(`Message ${job.externalId} from ${job.tenantId} not found`);
+    throw new PermanentJobError(`Message ${job.externalId} from ${job.tenantId} not found`);
   }
 
   const reply: Message = {
