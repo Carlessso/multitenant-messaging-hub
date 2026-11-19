@@ -57,6 +57,9 @@ model Message {
   text           String
   sentAt         DateTime     @map("sent_at") @db.Timestamptz(3)
   receivedAt     DateTime     @default(now()) @map("received_at") @db.Timestamptz(3)
+  replyToId      String?      @unique @map("reply_to_id") @db.Uuid
+  replyTo        Message?     @relation("MessageReply", fields: [replyToId], references: [id])
+  reply          Message?     @relation("MessageReply")
 
   @@unique([tenantId, externalId])
   @@index([tenantId, receivedAt])
