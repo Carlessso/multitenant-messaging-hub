@@ -91,4 +91,27 @@ describe('POST /webhooks/:tenantId', () => {
     expect(responseTwo.statusCode).toBe(202);
     expect(count).toBe(1);
   });
+
+  it('returns 400 with details for an invalid payload', async () => {
+    await db.prisma.tenant.create({
+      data: {
+        id: 'loja-x',
+        name: 'Loja x',
+      },
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/webhooks/loja-x',
+      payload: { ...validPayload, channel: 'telegram' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: 'VALIDATION_ERROR',
+        details: [{ path: 'body.channel' }],
+      },
+    });
+  });
 });
