@@ -29,6 +29,8 @@ export class BullMQMessageQueue implements MessageQueue {
       defaultJobOptions: {
         attempts: 5,
         backoff: { type: 'exponential', delay: 1_000 },
+        removeOnComplete: { age: 60 * 60, count: 1_000 },
+        removeOnFail: { age: 7 * 24 * 60 * 60 },
       },
     });
   }
