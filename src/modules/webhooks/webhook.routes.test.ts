@@ -1,14 +1,10 @@
-import { execFileSync } from 'node:child_process';
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../app.js';
-import type { PrismaClient } from '../../generated/prisma/client.js';
-import { createPrismaClient } from '../../shared/database/prisma.js';
+import { resetDatabase, startTestDatabase, type TestDatabase } from '../../test/database.js';
 
-let container: StartedPostgreSqlContainer;
+let db: TestDatabase;
 let app: FastifyInstance;
-let prisma: PrismaClient;
 
 const validPayload = {
   externalId: 'wamid.HBgLNTUxMTk5OTk5OTk5FQIAERgSQzRBMjE2',
@@ -19,27 +15,18 @@ const validPayload = {
 };
 
 beforeAll(async () => {
-  container = await new PostgreSqlContainer('postgres:18-alpine').start();
-  const databaseUrl = container.getConnectionUri();
-  prisma = createPrismaClient(databaseUrl);
+  db = await startTestDatabase();
 
-  execFileSync('npx', ['prisma', 'migrate', 'deploy'], {
-    env: { ...process.env, DATABASE_URL: databaseUrl },
-  });
-
-  app = buildApp({ databaseUrl, logger: false });
+  app = buildApp({ databaseUrl: db.url, logger: false });
 }, 60_000);
 
 beforeEach(async () => {
-  await prisma.message.deleteMany();
-  await prisma.conversation.deleteMany();
-  await prisma.tenant.deleteMany();
+  await resetDatabase(db.prisma);
 });
 
 afterAll(async () => {
-  await prisma.$disconnect();
   await app.close();
-  await container.stop();
+  await db.stop();
 });
 
 describe('POST /webhooks/:tenantId', () => {
@@ -57,7 +44,7 @@ describe('POST /webhooks/:tenantId', () => {
   });
 
   it('persists the message and returns 202', async () => {
-    await prisma.tenant.create({
+    await db.prisma.tenant.create({
       data: {
         id: 'loja-x',
         name: 'Loja X',
@@ -70,7 +57,7 @@ describe('POST /webhooks/:tenantId', () => {
       payload: validPayload,
     });
 
-    const messages = await prisma.message.findMany({ where: { tenantId: 'loja-x' } });
+    const messages = await db.prisma.message.findMany({ where: { tenantId: 'loja-x' } });
 
     expect(response.statusCode).toBe(202);
     expect(response.json()).toEqual({ received: true });
@@ -79,7 +66,7 @@ describe('POST /webhooks/:tenantId', () => {
   });
 
   it('does not duplicate a redelivered message', async () => {
-    await prisma.tenant.create({
+    await db.prisma.tenant.create({
       data: {
         id: 'loja-x',
         name: 'Tenant dup',
@@ -98,7 +85,7 @@ describe('POST /webhooks/:tenantId', () => {
       payload: validPayload,
     });
 
-    const count = await prisma.message.count({ where: { tenantId: 'loja-x' } });
+    const count = await db.prisma.message.count({ where: { tenantId: 'loja-x' } });
 
     expect(responseOne.statusCode).toBe(202);
     expect(responseTwo.statusCode).toBe(202);
