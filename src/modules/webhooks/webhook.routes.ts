@@ -5,10 +5,12 @@ import type { Message } from '../messages/message.types.js';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import type { TenantRepository } from '../tenants/tenant.repository.js';
 import { NotFoundError } from '../../shared/http/errors.js';
+import type { MessageQueue } from '../messages/message.queue.js';
 
 export type WebhookRoutesOptions = {
   messageRepository: MessageRepository;
   tenantRepository: TenantRepository;
+  messageQueue: MessageQueue;
 };
 
 export const webhookRoutes: FastifyPluginAsyncZod<WebhookRoutesOptions> = async (app, options) => {
@@ -34,6 +36,10 @@ export const webhookRoutes: FastifyPluginAsyncZod<WebhookRoutesOptions> = async 
       };
 
       await options.messageRepository.save(message);
+      await options.messageQueue.enqueue({
+        tenantId: request.params.tenantId,
+        externalId: request.body.externalId,
+      });
 
       reply.code(202);
       return { received: true };

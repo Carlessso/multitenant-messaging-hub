@@ -7,10 +7,12 @@ import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod
 import { registerErrorHandlers } from './shared/http/error-handler.js';
 import { createPrismaClient } from './shared/database/prisma.js';
 import { PrismaTenantRepository } from './modules/tenants/tenant.repository.js';
+import { BullMQMessageQueue } from './modules/messages/message.queue.js';
 
 export interface AppOptions {
   databaseUrl: string;
   logger?: boolean;
+  redisUrl: string;
 }
 
 export function buildApp(options: AppOptions): FastifyInstance {
@@ -22,14 +24,21 @@ export function buildApp(options: AppOptions): FastifyInstance {
 
   const prisma = createPrismaClient(options.databaseUrl);
 
-  app.addHook('onClose', async () => {
-    await prisma.$disconnect();
-  });
-
   const messageRepository = new PrismaMessageRepository(prisma);
   const tenantRepository = new PrismaTenantRepository(prisma);
+  const messageQueue = new BullMQMessageQueue(options.redisUrl);
 
-  app.register(webhookRoutes, { prefix: '/webhooks', tenantRepository, messageRepository });
+  app.addHook('onClose', async () => {
+    await prisma.$disconnect();
+    await messageQueue.close();
+  });
+
+  app.register(webhookRoutes, {
+    prefix: '/webhooks',
+    tenantRepository,
+    messageRepository,
+    messageQueue,
+  });
   app.register(messageRoutes, { prefix: '/tenants', messageRepository, tenantRepository });
 
   app.get('/health', async () => {

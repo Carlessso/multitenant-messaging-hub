@@ -4,6 +4,7 @@ import { env } from './config/env.js';
 const options: AppOptions = {
   databaseUrl: env.DATABASE_URL,
   logger: true,
+  redisUrl: env.REDIS_URL,
 };
 
 const app = buildApp(options);

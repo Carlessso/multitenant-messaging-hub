@@ -2,9 +2,11 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../app.js';
 import { resetDatabase, startTestDatabase, type TestDatabase } from '../../test/database.js';
+import { startTestRedis, type TestRedis } from '../../test/redis.js';
 
 let db: TestDatabase;
 let app: FastifyInstance;
+let redis: TestRedis;
 
 const validPayload = {
   externalId: 'wamid.HBgLNTUxMTk5OTk5OTk5FQIAERgSQzRBMjE2',
@@ -15,18 +17,20 @@ const validPayload = {
 };
 
 beforeAll(async () => {
-  db = await startTestDatabase();
+  [db, redis] = await Promise.all([startTestDatabase(), startTestRedis()]);
 
-  app = buildApp({ databaseUrl: db.url, logger: false });
+  app = buildApp({ databaseUrl: db.url, logger: false, redisUrl: redis.url });
 }, 60_000);
 
 beforeEach(async () => {
   await resetDatabase(db.prisma);
+  await redis.flush();
 });
 
 afterAll(async () => {
   await app.close();
   await db.stop();
+  await redis.stop();
 });
 
 describe('GET /tenants/:tenantId/messages', () => {
