@@ -1,12 +1,15 @@
+import { Queue } from 'bullmq';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../app.js';
 import { resetDatabase, startTestDatabase, type TestDatabase } from '../../test/database.js';
 import { startTestRedis, type TestRedis } from '../../test/redis.js';
+import { INCOMING_MESSAGES_QUEUE, type IncomingMessageJob } from '../messages/message.queue.js';
 
 let app: FastifyInstance;
 let db: TestDatabase;
 let redis: TestRedis;
+let queue: Queue<IncomingMessageJob>;
 
 const validPayload = {
   externalId: 'wamid.HBgLNTUxMTk5OTk5OTk5FQIAERgSQzRBMjE2',
@@ -20,6 +23,7 @@ beforeAll(async () => {
   [db, redis] = await Promise.all([startTestDatabase(), startTestRedis()]);
 
   app = buildApp({ databaseUrl: db.url, logger: false, redisUrl: redis.url });
+  queue = new Queue(INCOMING_MESSAGES_QUEUE, { connection: { url: redis.url } });
 }, 60_000);
 
 beforeEach(async () => {
@@ -29,6 +33,7 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await app.close();
+  await queue.close();
   await db.stop();
   await redis.stop();
 });
@@ -67,6 +72,35 @@ describe('POST /webhooks/:tenantId', () => {
     expect(response.json()).toEqual({ received: true });
     expect(messages).toHaveLength(1);
     expect(messages[0]?.text).toBe(validPayload.text);
+  });
+
+  it('enqueues the message for processing', async () => {
+    await db.prisma.tenant.create({
+      data: {
+        id: 'loja-x',
+        name: 'Loja X',
+      },
+    });
+
+    await app.inject({
+      method: 'POST',
+      url: '/webhooks/loja-x',
+      payload: validPayload,
+    });
+
+    const job = await queue.getJob(`loja-x_${encodeURIComponent(validPayload.externalId)}`);
+
+    expect(job?.data).toEqual({ tenantId: 'loja-x', externalId: validPayload.externalId });
+  });
+
+  it('does not enqueue anything for an unknown tenant', async () => {
+    await app.inject({
+      method: 'POST',
+      url: '/webhooks/tenant-inexistente',
+      payload: validPayload,
+    });
+
+    expect(await queue.count()).toBe(0);
   });
 
   it('does not duplicate a redelivered message', async () => {
