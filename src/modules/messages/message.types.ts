@@ -13,4 +13,5 @@ export type Message = {
   direction: 'outbound' | 'inbound';
   sentAt: Date;
   receivedAt: Date;
+  replyToId?: string;
 };

@@ -4,20 +4,7 @@ import type { Message } from './message.types.js';
 export interface MessageRepository {
   save(message: Message): Promise<void>;
   listByTenant(tenantId: string): Promise<Message[]>;
-}
-
-export class InMemoryMessageRepository implements MessageRepository {
-  private readonly messagesByTenant = new Map<string, Message[]>();
-
-  async save(message: Message): Promise<void> {
-    const messages = this.messagesByTenant.get(message.tenantId) ?? [];
-    this.messagesByTenant.set(message.tenantId, [...messages, message]);
-  }
-
-  async listByTenant(tenantId: string): Promise<Message[]> {
-    const messages = this.messagesByTenant.get(tenantId) ?? [];
-    return [...messages];
-  }
+  findByExternalId(tenantId: string, externalId: string): Promise<Message | null>;
 }
 
 export class PrismaMessageRepository implements MessageRepository {
@@ -54,6 +41,7 @@ export class PrismaMessageRepository implements MessageRepository {
           text: message.text,
           sentAt: message.sentAt,
           receivedAt: message.receivedAt,
+          replyToId: message.replyToId,
         },
       });
     } catch (error) {
@@ -71,19 +59,40 @@ export class PrismaMessageRepository implements MessageRepository {
       include: { conversation: true },
     });
 
-    return rows.map((row) => ({
-      id: row.id,
-      tenantId: row.tenantId,
-      externalId: row.externalId ?? undefined,
-      channel: row.conversation.channel,
-      from: {
-        id: row.conversation.contactId,
-        name: row.conversation.contactName ?? undefined,
-      },
-      text: row.text,
-      direction: row.direction,
-      sentAt: row.sentAt,
-      receivedAt: row.receivedAt,
-    }));
+    return rows.map(toEntity);
   }
+
+  async findByExternalId(tenantId: string, externalId: string): Promise<Message | null> {
+    const row = await this.prisma.message.findUnique({
+      where: {
+        tenantId_externalId: {
+          tenantId,
+          externalId,
+        },
+      },
+      include: { conversation: true },
+    });
+
+    return row ? toEntity(row) : null;
+  }
+}
+
+type MessageRow = Prisma.MessageGetPayload<{ include: { conversation: true } }>;
+
+function toEntity(row: MessageRow): Message {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    externalId: row.externalId ?? undefined,
+    channel: row.conversation.channel,
+    from: {
+      id: row.conversation.contactId,
+      name: row.conversation.contactName ?? undefined,
+    },
+    text: row.text,
+    direction: row.direction,
+    sentAt: row.sentAt,
+    receivedAt: row.receivedAt,
+    replyToId: row.replyToId ?? undefined,
+  };
 }
