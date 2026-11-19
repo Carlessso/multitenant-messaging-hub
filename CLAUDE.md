@@ -1,6 +1,6 @@
 # multitenant-messaging-hub
 
-Multi-tenant messaging hub: receives WhatsApp/Instagram-style webhooks, enqueues each message (retry, idempotency, dead-letter), persists it, and auto-replies with an LLM, streaming the reply via SSE.
+Multi-tenant messaging hub: receives WhatsApp/Instagram-style webhooks, enqueues each message (retry, idempotency, dead-letter), persists it, and auto-replies with an LLM, streaming the reply via SSE. There is no real WhatsApp/Instagram integration: providers are simulated, and a React chat UI plays the customer's side.
 
 ## Stack
 
@@ -69,3 +69,4 @@ Standard error response: `{ "error": { "code", "message", "details"?, "requestId
 5. BullMQ queue: async processing with retry, idempotency and dead-letter
 6. `LLMProvider` (Gemini + mock), auto-reply streamed via SSE
 7. Per-tenant API key auth, Pino logs, metrics, CI on GitHub Actions
+8. React chat UI: create tenants (`POST /tenants`), send messages as a fake customer through the webhook, and watch replies stream in via SSE
