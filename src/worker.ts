@@ -28,7 +28,10 @@ worker.on('completed', (job) => {
 });
 
 worker.on('failed', (job, err) => {
-  logger.error({ jobId: job?.id, err }, 'job failed');
+  logger.error(
+    { jobId: job?.id, attempt: job?.attemptsMade, maxAttempts: job?.opts.attempts, err },
+    'job failed',
+  );
 });
 
 worker.on('error', (err) => {

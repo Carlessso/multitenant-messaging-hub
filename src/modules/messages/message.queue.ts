@@ -18,6 +18,10 @@ export class BullMQMessageQueue implements MessageQueue {
   constructor(redisUrl: string) {
     this.queue = new Queue(INCOMING_MESSAGES_QUEUE, {
       connection: { url: redisUrl },
+      defaultJobOptions: {
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 1_000 },
+      },
     });
   }
 
