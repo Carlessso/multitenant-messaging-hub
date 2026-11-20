@@ -11,12 +11,14 @@ import {
 import { Queue, UnrecoverableError, Worker, type Job } from 'bullmq';
 import { processIncomingMessage } from './modules/messages/process-incoming-message.js';
 import { PermanentJobError } from './shared/jobs/errors.js';
+import { MockLLMProvider } from './modules/llm/mock-llm.provider.js';
 
 const logger = pino();
 
 const prisma = createPrismaClient(env.DATABASE_URL);
 
 const messageRepository = new PrismaMessageRepository(prisma);
+const llmProvider = new MockLLMProvider();
 
 const deadLetterQueue = new Queue<DeadLetterJob>(INCOMING_MESSAGES_DLQ, {
   connection: { url: env.REDIS_URL },
@@ -48,7 +50,7 @@ const worker = new Worker<IncomingMessageJob>(
   INCOMING_MESSAGES_QUEUE,
   async (job) => {
     try {
-      await processIncomingMessage(job.data, { messageRepository });
+      await processIncomingMessage(job.data, { messageRepository, llmProvider });
     } catch (err) {
       if (err instanceof PermanentJobError) {
         throw new UnrecoverableError(err.message);

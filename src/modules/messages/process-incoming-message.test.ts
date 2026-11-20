@@ -1,13 +1,18 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { startTestDatabase, resetDatabase, type TestDatabase } from '../../test/database.js';
 import { PrismaMessageRepository } from './message.repository.js';
-import { processIncomingMessage } from './process-incoming-message.js';
+import {
+  processIncomingMessage,
+  type ProcessIncomingMessageDeps,
+} from './process-incoming-message.js';
 import type { Message } from './message.types.js';
 import type { IncomingMessageJob } from './message.queue.js';
 import { PermanentJobError } from '../../shared/jobs/errors.js';
+import { MockLLMProvider } from '../llm/mock-llm.provider.js';
 
 let db: TestDatabase;
 let repo: PrismaMessageRepository;
+let deps: ProcessIncomingMessageDeps;
 
 const tenantId = 'loja-x';
 
@@ -32,6 +37,7 @@ beforeAll(async () => {
   db = await startTestDatabase();
 
   repo = new PrismaMessageRepository(db.prisma);
+  deps = { messageRepository: repo, llmProvider: new MockLLMProvider(0) };
 }, 60_000);
 
 beforeEach(async () => {
@@ -53,7 +59,7 @@ describe('process incoming messages', () => {
 
     await repo.save(inboundMessage);
 
-    await processIncomingMessage(job, { messageRepository: repo });
+    await processIncomingMessage(job, deps);
 
     const replies = await db.prisma.message.findMany({
       where: {
@@ -63,6 +69,7 @@ describe('process incoming messages', () => {
     });
 
     expect(replies).toHaveLength(1);
+    expect(replies[0]?.text).toBe(`Echo: ${inboundMessage.text}`);
   });
 
   it('does not create a second reply when the job runs twice', async () => {
@@ -75,8 +82,8 @@ describe('process incoming messages', () => {
 
     await repo.save(inboundMessage);
 
-    await processIncomingMessage(job, { messageRepository: repo });
-    await processIncomingMessage(job, { messageRepository: repo });
+    await processIncomingMessage(job, deps);
+    await processIncomingMessage(job, deps);
 
     const replies = await db.prisma.message.findMany({
       where: {
@@ -99,8 +106,6 @@ describe('process incoming messages', () => {
 
     const newJob = { ...job, externalId: 'safdsadfsa' };
 
-    await expect(processIncomingMessage(newJob, { messageRepository: repo })).rejects.toThrow(
-      PermanentJobError,
-    );
+    await expect(processIncomingMessage(newJob, deps)).rejects.toThrow(PermanentJobError);
   });
 });
