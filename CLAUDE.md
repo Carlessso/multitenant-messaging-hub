@@ -24,7 +24,8 @@ Multi-tenant messaging hub: receives WhatsApp/Instagram-style webhooks, persists
 - `npm run format` / `npm run format:check`: Prettier
 - `npm run build` / `npm start` / `npm run start:worker`: compile to `dist/` and run the API / worker with plain Node
 - `npm test`: Vitest (Docker must be running for Testcontainers)
-- `docker compose up -d`: start PostgreSQL (`127.0.0.1:5432`) and Redis (`127.0.0.1:6379`, `noeviction`)
+- `docker compose up --build`: full stack in containers (postgres, redis, one-shot `migrate` + seed, api on `127.0.0.1:3000`, worker, web/nginx on `127.0.0.1:8080`)
+- `docker compose up -d postgres redis`: only the infrastructure, for local development with `npm run dev` (the full stack also binds port 3000)
 - `npm run db:migrate`: `prisma migrate dev` (create + apply migrations; review the generated SQL before applying)
 - `npm run db:generate`: regenerate the Prisma client into `src/generated/prisma` (not committed; run after every schema change)
 - `npm run db:seed`: idempotent seed of dev tenants (`loja-x`, `padaria-do-joao`)
@@ -66,6 +67,8 @@ src/
     metrics/    # Prometheus registry, HTTP/queue/SSE metrics, GET /metrics
   test/         # Testcontainers helpers (Postgres, Redis)
   generated/    # Prisma client (generated, gitignored)
+Dockerfile      # multi-stage: `build` (also used by the migrate service) and slim `runtime` (api and worker)
+docker-compose.yml
 prisma/
   schema.prisma # tenants, conversations, messages
   migrations/

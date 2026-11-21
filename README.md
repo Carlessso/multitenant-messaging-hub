@@ -20,7 +20,8 @@ A multi-tenant messaging hub built with Node.js and TypeScript. It receives What
 - **Per-tenant bot instructions** — each store owner writes how its assistant should behave (`PUT /tenants/:tenantId/settings`). The worker reads them on every job, so edits apply to the next message.
 - **Web UI** — a React app (`web/`) to create tenants, edit the bot instructions and chat as a customer, with replies appearing chunk by chunk.
 - **Prometheus metrics** — `GET /metrics` exposes Node runtime metrics (including event loop lag), HTTP latency per route, queue depth by state, dead-letter queue size and open SSE connections.
-- **CI** — GitHub Actions runs formatting, lint, type checking and the full test suite (with real PostgreSQL and Redis containers) on every push.
+- **One-command setup** — `docker compose up --build` runs the whole system (database, Redis, migrations, API, worker and web UI) with multi-stage images, health checks and graceful shutdown.
+- **CI** — GitHub Actions runs formatting, lint, type checking and the full test suite (with real PostgreSQL and Redis containers) on every push, and checks that the Docker images build.
 - **Consistent error format** — every error, from validation to unhandled exceptions, uses the same envelope with a `requestId` for tracing.
 - **Graceful shutdown** — on `SIGINT`/`SIGTERM` the API finishes in-flight requests and the worker finishes the job in progress before closing their connections.
 - **Integration tests against real infrastructure** — Testcontainers spins up disposable PostgreSQL and Redis instances, applies the migrations and exercises the HTTP API and the job processor end to end.
@@ -93,7 +94,30 @@ The API and the worker are separate processes that never talk to each other dire
 - **Metrics without cardinality explosions.** HTTP latency is labelled with the route template (`/tenants/:tenantId/messages`), never the raw URL, so the number of time series does not grow with tenants or ids. Queue gauges are read from BullMQ at scrape time instead of being tracked by hand. `/metrics` is unauthenticated, as Prometheus scrapers usually are, and must only be reachable from the internal network.
 - **Known trade-off: dual write.** The webhook saves to PostgreSQL and then enqueues to Redis, which is not atomic. If enqueuing fails, the provider's retry fixes it, because the route always enqueues, even for a duplicate message. The robust alternative is the transactional outbox pattern.
 
-## Getting started
+## Quick start (Docker only)
+
+The only requirement is Docker.
+
+```bash
+git clone https://github.com/Carlessso/multitenant-messaging-hub.git
+cd multitenant-messaging-hub
+docker compose up --build
+```
+
+Then open **http://127.0.0.1:8080** and log in as `loja-x` with the API key `hub_dev_loja-x`.
+
+| Service    | What it does                                                 | Address                 |
+| ---------- | ------------------------------------------------------------ | ----------------------- |
+| `postgres` | PostgreSQL 18                                                | `127.0.0.1:5432`        |
+| `redis`    | Redis 8 (queue and pub/sub)                                  | `127.0.0.1:6379`        |
+| `migrate`  | One-shot: applies the migrations and seeds the dev tenants   | —                       |
+| `api`      | Fastify API (starts once `migrate` succeeded)                | `http://127.0.0.1:3000` |
+| `worker`   | Queue worker that generates the replies                      | —                       |
+| `web`      | React UI served by nginx, which also proxies the API and SSE | `http://127.0.0.1:8080` |
+
+Services start in dependency order with health checks, every port is bound to `127.0.0.1` only, and `docker compose down` stops everything gracefully (`docker compose down -v` also wipes the data). The worker uses the mock LLM unless `LLM_PROVIDER=gemini` and `GEMINI_API_KEY` are set in a `.env` file next to `docker-compose.yml`. The admin key for creating tenants defaults to `local-admin-key-change-me` (override it with `ADMIN_API_KEY` in `.env`).
+
+## Development
 
 Requirements: Node.js 26 (`nvm use`), Docker.
 
@@ -101,14 +125,16 @@ Requirements: Node.js 26 (`nvm use`), Docker.
 npm install
 cp .env.example .env
 
-docker compose up -d        # PostgreSQL on 127.0.0.1:5432, Redis on 127.0.0.1:6379
-npm run db:migrate          # apply migrations
-npm run db:generate         # generate the Prisma client
-npm run db:seed             # create the dev tenants: loja-x, padaria-do-joao
+docker compose up -d postgres redis   # only the infrastructure
+npm run db:migrate                    # apply migrations
+npm run db:generate                   # generate the Prisma client
+npm run db:seed                       # create the dev tenants: loja-x, padaria-do-joao
 
-npm run dev                 # API on http://127.0.0.1:3000
-npm run dev:worker          # worker, in another terminal
+npm run dev                           # API on http://127.0.0.1:3000, with reload
+npm run dev:worker                    # worker, in another terminal
 ```
+
+Do not run the full Docker stack at the same time: its `api` container also uses port 3000.
 
 The seed gives the dev tenants fixed API keys, for local use only: `hub_dev_loja-x` and `hub_dev_padaria-do-joao`. To create tenants through the API, set `ADMIN_API_KEY` (16+ characters) in `.env`.
 

@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+const optionalSecret = (schema: z.ZodString) =>
+  z.preprocess((value) => (value === '' ? undefined : value), schema.optional());
+
 const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -7,9 +10,9 @@ const envSchema = z
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
     DATABASE_URL: z.url(),
     REDIS_URL: z.url(),
-    ADMIN_API_KEY: z.string().min(16).optional(),
+    ADMIN_API_KEY: optionalSecret(z.string().min(16)),
     LLM_PROVIDER: z.enum(['mock', 'gemini']).default('mock'),
-    GEMINI_API_KEY: z.string().min(1).optional(),
+    GEMINI_API_KEY: optionalSecret(z.string().min(1)),
     GEMINI_MODEL: z.string().default('gemini-3.8-flash'),
     LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
   })

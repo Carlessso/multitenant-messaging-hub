@@ -1,3 +1,7 @@
+x-app-env: &app-env
+  DATABASE_URL: postgresql://hubnode:hubnode@postgres:5432/hubnode
+  REDIS_URL: redis://redis:6379
+
 services:
   postgres:
     image: postgres:18-alpine
@@ -27,6 +31,64 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  migrate:
+    build:
+      context: .
+      target: build
+    image: multitenant-messaging-hub-migrate
+    command: ['sh', '-c', 'npx prisma migrate deploy && npx tsx prisma/seed.ts']
+    environment: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build: .
+    image: multitenant-messaging-hub
+    init: true
+    environment:
+      <<: *app-env
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-local-admin-key-change-me}
+    ports:
+      - '127.0.0.1:3000:3000'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/health']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  worker:
+    build: .
+    image: multitenant-messaging-hub
+    init: true
+    command: ['node', 'dist/worker.js']
+    environment:
+      <<: *app-env
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
+      LLM_TIMEOUT_MS: ${LLM_TIMEOUT_MS:-60000}
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build: ./web
+    image: multitenant-messaging-hub-web
+    ports:
+      - '127.0.0.1:8080:80'
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   postgres-data:
