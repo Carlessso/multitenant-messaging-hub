@@ -9,10 +9,22 @@ import type { Message } from './message.types.js';
 import type { IncomingMessageJob } from './message.queue.js';
 import { PermanentJobError } from '../../shared/jobs/errors.js';
 import { MockLLMProvider } from '../llm/mock-llm.provider.js';
+import type { ReplyEvent, ReplyPublisher } from '../replies/reply.events.js';
+
+class InMemoryReplyPublisher implements ReplyPublisher {
+  readonly events: ReplyEvent[] = [];
+
+  async publish(_tenantId: string, event: ReplyEvent): Promise<void> {
+    this.events.push(event);
+  }
+
+  async close(): Promise<void> {}
+}
 
 let db: TestDatabase;
 let repo: PrismaMessageRepository;
 let deps: ProcessIncomingMessageDeps;
+let replyPublisher: InMemoryReplyPublisher;
 
 const tenantId = 'loja-x';
 
@@ -37,11 +49,12 @@ beforeAll(async () => {
   db = await startTestDatabase();
 
   repo = new PrismaMessageRepository(db.prisma);
-  deps = { messageRepository: repo, llmProvider: new MockLLMProvider(0) };
 }, 60_000);
 
 beforeEach(async () => {
   await resetDatabase(db.prisma);
+  replyPublisher = new InMemoryReplyPublisher();
+  deps = { messageRepository: repo, llmProvider: new MockLLMProvider(0), replyPublisher };
 });
 
 afterAll(async () => {
@@ -70,6 +83,27 @@ describe('process incoming messages', () => {
 
     expect(replies).toHaveLength(1);
     expect(replies[0]?.text).toBe(`Echo: ${inboundMessage.text}`);
+  });
+
+  it('publishes each chunk and then a done event with the full text', async () => {
+    await db.prisma.tenant.create({
+      data: {
+        id: tenantId,
+        name: 'Loja X',
+      },
+    });
+
+    await repo.save(inboundMessage);
+
+    await processIncomingMessage(job, deps);
+
+    const chunks = replyPublisher.events.filter((event) => event.type === 'chunk');
+    const last = replyPublisher.events.at(-1);
+    const expectedText = `Echo: ${inboundMessage.text}`;
+
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.map((event) => event.text).join('')).toBe(expectedText);
+    expect(last).toEqual({ type: 'done', replyToId: inboundMessage.id, text: expectedText });
   });
 
   it('does not create a second reply when the job runs twice', async () => {

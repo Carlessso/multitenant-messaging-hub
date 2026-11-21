@@ -8,6 +8,8 @@ import { registerErrorHandlers } from './shared/http/error-handler.js';
 import { createPrismaClient } from './shared/database/prisma.js';
 import { PrismaTenantRepository } from './modules/tenants/tenant.repository.js';
 import { BullMQMessageQueue } from './modules/messages/message.queue.js';
+import { RedisReplySubscriber } from './modules/replies/redis-reply-subscriber.js';
+import { replyRoutes } from './modules/replies/reply.routes.js';
 
 export interface AppOptions {
   databaseUrl: string;
@@ -16,7 +18,7 @@ export interface AppOptions {
 }
 
 export function buildApp(options: AppOptions): FastifyInstance {
-  const app = Fastify({ logger: options.logger ?? true });
+  const app = Fastify({ logger: options.logger ?? true, forceCloseConnections: true });
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
@@ -27,10 +29,14 @@ export function buildApp(options: AppOptions): FastifyInstance {
   const messageRepository = new PrismaMessageRepository(prisma);
   const tenantRepository = new PrismaTenantRepository(prisma);
   const messageQueue = new BullMQMessageQueue(options.redisUrl);
+  const replySubscriber = new RedisReplySubscriber(options.redisUrl, (err) => {
+    app.log.error({ err }, 'reply subscriber error');
+  });
 
   app.addHook('onClose', async () => {
     await prisma.$disconnect();
     await messageQueue.close();
+    await replySubscriber.close();
   });
 
   app.register(webhookRoutes, {
@@ -40,6 +46,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
     messageQueue,
   });
   app.register(messageRoutes, { prefix: '/tenants', messageRepository, tenantRepository });
+  app.register(replyRoutes, { prefix: '/tenants', tenantRepository, replySubscriber });
 
   app.get('/health', async () => {
     return { status: 'ok' };

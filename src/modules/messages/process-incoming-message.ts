@@ -1,5 +1,6 @@
 import { PermanentJobError } from '../../shared/jobs/errors.js';
 import type { LLMProvider } from '../llm/llm.provider.js';
+import type { ReplyPublisher } from '../replies/reply.events.js';
 import type { IncomingMessageJob } from './message.queue.js';
 import type { MessageRepository } from './message.repository.js';
 import type { Message } from './message.types.js';
@@ -7,6 +8,7 @@ import type { Message } from './message.types.js';
 export interface ProcessIncomingMessageDeps {
   messageRepository: MessageRepository;
   llmProvider: LLMProvider;
+  replyPublisher: ReplyPublisher;
 }
 
 export async function processIncomingMessage(
@@ -30,6 +32,11 @@ export async function processIncomingMessage(
     signal,
   })) {
     text += chunk;
+    await deps.replyPublisher.publish(inboundMessage.tenantId, {
+      type: 'chunk',
+      replyToId: inboundMessage.id,
+      text: chunk,
+    });
   }
 
   const reply: Message = {
@@ -45,4 +52,9 @@ export async function processIncomingMessage(
   };
 
   await deps.messageRepository.save(reply);
+  await deps.replyPublisher.publish(inboundMessage.tenantId, {
+    type: 'done',
+    replyToId: inboundMessage.id,
+    text,
+  });
 }

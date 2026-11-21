@@ -14,6 +14,7 @@ import { PermanentJobError } from './shared/jobs/errors.js';
 import { MockLLMProvider } from './modules/llm/mock-llm.provider.js';
 import { GeminiLLMProvider } from './modules/llm/gemini-llm.provider.js';
 import type { LLMProvider } from './modules/llm/llm.provider.js';
+import { RedisReplyPublisher } from './modules/replies/redis-reply-publisher.js';
 
 const logger = pino();
 
@@ -28,6 +29,9 @@ const prisma = createPrismaClient(env.DATABASE_URL);
 
 const messageRepository = new PrismaMessageRepository(prisma);
 const llmProvider = createLLMProvider();
+const replyPublisher = new RedisReplyPublisher(env.REDIS_URL, (err) => {
+  logger.error({ err }, 'reply publisher error');
+});
 
 const deadLetterQueue = new Queue<DeadLetterJob>(INCOMING_MESSAGES_DLQ, {
   connection: { url: env.REDIS_URL },
@@ -61,7 +65,7 @@ const worker = new Worker<IncomingMessageJob>(
     try {
       await processIncomingMessage(
         job.data,
-        { messageRepository, llmProvider },
+        { messageRepository, llmProvider, replyPublisher },
         AbortSignal.timeout(env.LLM_TIMEOUT_MS),
       );
     } catch (err) {
@@ -99,6 +103,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   try {
     await worker.close();
     await deadLetterQueue.close();
+    await replyPublisher.close();
     await prisma.$disconnect();
     process.exit(0);
   } catch (err) {
