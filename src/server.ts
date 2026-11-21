@@ -5,6 +5,7 @@ const options: AppOptions = {
   databaseUrl: env.DATABASE_URL,
   logger: true,
   redisUrl: env.REDIS_URL,
+  adminApiKey: env.ADMIN_API_KEY,
 };
 
 const app = buildApp(options);

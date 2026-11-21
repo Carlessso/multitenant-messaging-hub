@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../app.js';
 import { resetDatabase, startTestDatabase, type TestDatabase } from '../../test/database.js';
 import { startTestRedis, type TestRedis } from '../../test/redis.js';
+import { createTenant } from '../../test/tenants.js';
 import { RedisReplyPublisher } from './redis-reply-publisher.js';
 
 let app: FastifyInstance;
@@ -51,21 +52,24 @@ async function readUntil(
 }
 
 describe('GET /tenants/:tenantId/replies/stream', () => {
-  it('returns 404 for an unknown tenant', async () => {
+  it('returns 401 without an API key', async () => {
+    await createTenant(db.prisma, 'loja-x');
+
     const response = await app.inject({
       method: 'GET',
-      url: '/tenants/tenant-inexistente/replies/stream',
+      url: '/tenants/loja-x/replies/stream',
     });
 
-    expect(response.statusCode).toBe(404);
-    expect(response.json()).toMatchObject({ error: { code: 'TENANT_NOT_FOUND' } });
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({ error: { code: 'UNAUTHORIZED' } });
   });
 
   it("streams the tenant's reply events as server-sent events", async () => {
-    await db.prisma.tenant.create({ data: { id: 'loja-x', name: 'Loja X' } });
+    const apiKey = await createTenant(db.prisma, 'loja-x');
 
     const controller = new AbortController();
     const response = await fetch(`${baseUrl}/tenants/loja-x/replies/stream`, {
+      headers: { authorization: `Bearer ${apiKey}` },
       signal: controller.signal,
     });
 

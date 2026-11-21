@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../app.js';
 import { resetDatabase, startTestDatabase, type TestDatabase } from '../../test/database.js';
 import { startTestRedis, type TestRedis } from '../../test/redis.js';
+import { createTenant } from '../../test/tenants.js';
 
 let db: TestDatabase;
 let app: FastifyInstance;
@@ -34,29 +35,48 @@ afterAll(async () => {
 });
 
 describe('GET /tenants/:tenantId/messages', () => {
-  it('returns 404 for an unknown tenant', async () => {
-    const response = await app.inject({
-      method: 'GET',
-      url: '/tenants/tenant-inexistente/messages',
-    });
+  it('returns 401 without an API key', async () => {
+    await createTenant(db.prisma, 'loja-x');
 
-    expect(response.statusCode).toBe(404);
-    expect(response.json()).toMatchObject({
-      error: { code: 'TENANT_NOT_FOUND' },
-    });
+    const response = await app.inject({ method: 'GET', url: '/tenants/loja-x/messages' });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({ error: { code: 'UNAUTHORIZED' } });
   });
 
-  it('returns an empty list when the tenant has no messages', async () => {
-    await db.prisma.tenant.create({
-      data: {
-        id: 'loja-x',
-        name: 'Loja X',
-      },
-    });
+  it('returns 401 for an unknown API key', async () => {
+    await createTenant(db.prisma, 'loja-x');
 
     const response = await app.inject({
       method: 'GET',
       url: '/tenants/loja-x/messages',
+      headers: { authorization: 'Bearer hub_not-a-real-key' },
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("returns 403 when using another tenant's API key", async () => {
+    await createTenant(db.prisma, 'loja-x');
+    const otherApiKey = await createTenant(db.prisma, 'padaria-do-joao');
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/tenants/loja-x/messages',
+      headers: { authorization: `Bearer ${otherApiKey}` },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({ error: { code: 'FORBIDDEN' } });
+  });
+
+  it('returns an empty list when the tenant has no messages', async () => {
+    const apiKey = await createTenant(db.prisma, 'loja-x');
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/tenants/loja-x/messages',
+      headers: { authorization: `Bearer ${apiKey}` },
     });
 
     expect(response.statusCode).toBe(200);
@@ -64,12 +84,7 @@ describe('GET /tenants/:tenantId/messages', () => {
   });
 
   it("returns the tenant's messages", async () => {
-    await db.prisma.tenant.create({
-      data: {
-        id: 'loja-x',
-        name: 'Loja X',
-      },
-    });
+    const apiKey = await createTenant(db.prisma, 'loja-x');
 
     const post = await app.inject({
       method: 'POST',
@@ -82,6 +97,7 @@ describe('GET /tenants/:tenantId/messages', () => {
     const response = await app.inject({
       method: 'GET',
       url: '/tenants/loja-x/messages',
+      headers: { authorization: `Bearer ${apiKey}` },
     });
 
     expect(response.statusCode).toBe(200);

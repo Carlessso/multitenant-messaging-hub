@@ -10,11 +10,13 @@ import { PrismaTenantRepository } from './modules/tenants/tenant.repository.js';
 import { BullMQMessageQueue } from './modules/messages/message.queue.js';
 import { RedisReplySubscriber } from './modules/replies/redis-reply-subscriber.js';
 import { replyRoutes } from './modules/replies/reply.routes.js';
+import { tenantRoutes } from './modules/tenants/tenant.routes.js';
 
 export interface AppOptions {
   databaseUrl: string;
   logger?: boolean;
   redisUrl: string;
+  adminApiKey?: string;
 }
 
 export function buildApp(options: AppOptions): FastifyInstance {
@@ -44,6 +46,11 @@ export function buildApp(options: AppOptions): FastifyInstance {
     tenantRepository,
     messageRepository,
     messageQueue,
+  });
+  app.register(tenantRoutes, {
+    prefix: '/tenants',
+    tenantRepository,
+    adminApiKey: options.adminApiKey,
   });
   app.register(messageRoutes, { prefix: '/tenants', messageRepository, tenantRepository });
   app.register(replyRoutes, { prefix: '/tenants', tenantRepository, replySubscriber });

@@ -2,6 +2,7 @@ import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { tenantParamsSchema } from '../../shared/tenant.schema.js';
 import { NotFoundError } from '../../shared/http/errors.js';
 import type { TenantRepository } from '../tenants/tenant.repository.js';
+import { requireTenantApiKey } from '../tenants/tenant.auth.js';
 import type { ReplySubscriber } from './reply.events.js';
 
 const HEARTBEAT_INTERVAL_MS = 15_000;
@@ -12,6 +13,8 @@ export type ReplyRoutesOptions = {
 };
 
 export const replyRoutes: FastifyPluginAsyncZod<ReplyRoutesOptions> = async (app, options) => {
+  app.addHook('preHandler', requireTenantApiKey(options.tenantRepository));
+
   app.get(
     '/:tenantId/replies/stream',
     { schema: { params: tenantParamsSchema } },

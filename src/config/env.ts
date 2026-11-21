@@ -7,6 +7,7 @@ const envSchema = z
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
     DATABASE_URL: z.url(),
     REDIS_URL: z.url(),
+    ADMIN_API_KEY: z.string().min(16).optional(),
     LLM_PROVIDER: z.enum(['mock', 'gemini']).default('mock'),
     GEMINI_API_KEY: z.string().min(1).optional(),
     GEMINI_MODEL: z.string().default('gemini-3.8-flash'),
