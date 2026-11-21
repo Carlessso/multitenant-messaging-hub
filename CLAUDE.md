@@ -18,6 +18,7 @@ Multi-tenant messaging hub: receives WhatsApp/Instagram-style webhooks, persists
 
 - `npm run dev`: run the API with tsx watch + `.env` + pino-pretty
 - `npm run dev:worker`: run the queue worker the same way (separate process; run alongside `dev`)
+- `cd web && npm run dev`: React UI on `127.0.0.1:5173` (Vite proxies `/tenants` and `/webhooks` to the API); `npm run lint` (oxlint) and `npm run build` inside `web/`
 - `npm run typecheck`: `tsc --noEmit` (tsx does NOT type-check)
 - `npm run lint`: ESLint
 - `npm run format` / `npm run format:check`: Prettier
@@ -45,6 +46,7 @@ Multi-tenant messaging hub: receives WhatsApp/Instagram-style webhooks, persists
 - Jobs carry only identifiers (`tenantId`, `externalId`); the database is the source of truth. Idempotency is guaranteed by unique constraints, not by the queue's `jobId`.
 - LLM access goes through `LLMProvider.generateReply({ text, tenantId, signal })`, which returns an `AsyncIterable<string>`. Tests use `MockLLMProvider`; never call Gemini in tests. Every LLM call receives an `AbortSignal` (timeout from `LLM_TIMEOUT_MS`).
 - Tenant routes are protected by `requireTenantApiKey` (a `preHandler` hook added inside each tenant-scoped plugin); `POST /tenants` by `requireAdminApiKey` (`ADMIN_API_KEY`). Only SHA-256 hashes of API keys are stored. The webhook is intentionally unauthenticated (simulated provider). Seeded dev keys: `hub_dev_<tenantId>`.
+- Bot instructions (`tenants.bot_instructions`, max 2000 chars) are loaded per job and placed before fixed guardrails in the Gemini system prompt (`buildSystemInstruction`).
 - Metric labels use route templates (`request.routeOptions.url`), never raw URLs or ids.
 - Reply chunks go worker → Redis pub/sub (`replies:<tenantId>`) → API → SSE. Publishing is best effort; SSE routes must clean up their listeners and timers on the response `close` event.
 
@@ -68,6 +70,9 @@ prisma/
   schema.prisma # tenants, conversations, messages
   migrations/
   seed.ts
+web/            # React + Vite UI (own package.json, tsconfig and oxlint; ignored by the root ESLint)
+  src/api/      # fetch client, types copied from the API (never import backend code), SSE reader
+  src/components/ # TenantGate, ChatSimulator, BotSettings
 ```
 
 Standard error response: `{ "error": { "code", "message", "details"?, "requestId" } }` with codes `VALIDATION_ERROR`, `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `TENANT_NOT_FOUND`, `TENANT_ALREADY_EXISTS`, `INTERNAL_ERROR`.
