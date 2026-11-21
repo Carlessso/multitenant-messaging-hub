@@ -10,6 +10,7 @@ import {
   type WireEntry,
 } from '../activity.ts';
 import { ActivityPanel } from './ActivityPanel.tsx';
+import { Typewriter } from './Typewriter.tsx';
 
 interface ChatSimulatorProps {
   session: Session;
@@ -47,6 +48,8 @@ export function ChatSimulator({ session }: ChatSimulatorProps) {
   });
   const [messages, setMessages] = useState<Message[]>([]);
   const [streaming, setStreaming] = useState<Record<string, string>>({});
+  const [revealing, setRevealing] = useState<ReadonlySet<string>>(new Set());
+  const [streamDone, setStreamDone] = useState<ReadonlySet<string>>(new Set());
   const [connection, setConnection] = useState<ConnectionState>('connecting');
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
@@ -107,11 +110,17 @@ export function ChatSimulator({ session }: ChatSimulatorProps) {
         return;
       }
 
+      const { replyToId } = event;
       setStreaming((current) => ({
         ...current,
-        [event.replyToId]:
-          event.type === 'done' ? event.text : (current[event.replyToId] ?? '') + event.text,
+        [replyToId]: event.type === 'done' ? event.text : (current[replyToId] ?? '') + event.text,
       }));
+      setRevealing((current) =>
+        current.has(replyToId) ? current : new Set(current).add(replyToId),
+      );
+      if (event.type === 'done') {
+        setStreamDone((current) => new Set(current).add(replyToId));
+      }
 
       if (event.type === 'done') {
         const inbound = messagesRef.current.find((message) => message.id === event.replyToId);
@@ -159,6 +168,18 @@ export function ChatSimulator({ session }: ChatSimulatorProps) {
       ),
     [messages, customer.id, customer.channel],
   );
+
+  const markRevealed = useCallback((replyToId: string) => {
+    setRevealing((current) => {
+      const next = new Set(current);
+      next.delete(replyToId);
+      return next;
+    });
+  }, []);
+
+  const scrollToBottom = useCallback(() => {
+    bottomRef.current?.scrollIntoView({ block: 'end' });
+  }, []);
 
   const contacts = useMemo(() => {
     const unique = new Map<string, Customer>();
@@ -222,14 +243,28 @@ export function ChatSimulator({ session }: ChatSimulatorProps) {
   }
 
   function renderPendingReply(message: Message) {
-    if (message.direction !== 'inbound' || answered.has(message.id)) return null;
+    if (message.direction !== 'inbound') return null;
 
     const partial = streaming[message.id];
-    if (partial !== undefined) {
+    if (partial !== undefined && revealing.has(message.id)) {
       return (
         <div className="bubble bot streaming" key={`${message.id}-reply`}>
+          <Typewriter
+            text={partial}
+            done={streamDone.has(message.id)}
+            onProgress={scrollToBottom}
+            onComplete={() => markRevealed(message.id)}
+          />
+        </div>
+      );
+    }
+
+    if (answered.has(message.id)) return null;
+
+    if (partial !== undefined && streamDone.has(message.id)) {
+      return (
+        <div className="bubble bot" key={`${message.id}-reply`}>
           {partial}
-          <span className="cursor" />
         </div>
       );
     }
@@ -319,16 +354,22 @@ export function ChatSimulator({ session }: ChatSimulatorProps) {
           {conversation.length === 0 && (
             <p className="empty">No messages yet. Say hi to the store!</p>
           )}
-          {conversation.map((message) => [
-            <div
-              key={message.id}
-              className={message.direction === 'inbound' ? 'bubble me' : 'bubble bot'}
-            >
-              {message.text}
-              <time>{formatTime(message.receivedAt)}</time>
-            </div>,
-            renderPendingReply(message),
-          ])}
+          {conversation.map((message) =>
+            message.direction === 'outbound' &&
+            message.replyToId !== undefined &&
+            revealing.has(message.replyToId)
+              ? null
+              : [
+                  <div
+                    key={message.id}
+                    className={message.direction === 'inbound' ? 'bubble me' : 'bubble bot'}
+                  >
+                    {message.text}
+                    <time>{formatTime(message.receivedAt)}</time>
+                  </div>,
+                  renderPendingReply(message),
+                ],
+          )}
           <div ref={bottomRef} />
         </div>
 

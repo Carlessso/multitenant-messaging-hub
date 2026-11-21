@@ -171,7 +171,7 @@ npm run dev                 # http://127.0.0.1:5173 (API and worker must be runn
 - **Chat** plays the customer: pick a phone number and channel, send messages through the webhook and watch the reply arrive chunk by chunk.
 - **Bot settings** edits the tenant's bot instructions.
 
-Vite proxies `/tenants` and `/webhooks` to the API, so the browser sees a single origin and no CORS setup is needed. The reply stream is read with `fetch` and a stream reader instead of `EventSource`, which cannot send the `Authorization` header. On every (re)connection the UI reloads the history, covering events missed while disconnected.
+Vite proxies `/tenants` and `/webhooks` to the API, so the browser sees a single origin and no CORS setup is needed. The reply stream is read with `fetch` and a stream reader instead of `EventSource`, which cannot send the `Authorization` header. On every (re)connection the UI reloads the history, covering events missed while disconnected. Gemini tends to send a reply in a few large chunks after its thinking time, so the UI reveals the received text progressively (typewriter style); the real chunks, as they arrived, are listed in the HTTP & SSE panel.
 
 ## API
 
