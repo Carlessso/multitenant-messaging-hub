@@ -104,7 +104,7 @@ cd multitenant-messaging-hub
 docker compose up --build
 ```
 
-Then open **http://127.0.0.1:8080** and log in as `loja-x` with the API key `hub_dev_loja-x`.
+Then open **http://127.0.0.1:8080**, pick one of the demo stores and start chatting as a customer. The seed creates two stores, Loja X and Padaria do João, each with its own bot instructions.
 
 | Service    | What it does                                                 | Address                 |
 | ---------- | ------------------------------------------------------------ | ----------------------- |
@@ -165,7 +165,7 @@ npm install
 npm run dev                 # http://127.0.0.1:5173 (API and worker must be running)
 ```
 
-- **Open a tenant** with its id and API key (e.g. `loja-x` / `hub_dev_loja-x`), or **create one** with the `ADMIN_API_KEY`; the new tenant's key is shown once.
+- **Pick a demo store** to go straight to the chat. Under _Use your own tenant_ you can also open any tenant with its id and API key, or create one with the `ADMIN_API_KEY` (the new tenant's key is shown once).
 - **Chat** plays the customer: pick a phone number and channel, send messages through the webhook and watch the reply arrive chunk by chunk.
 - **Bot settings** edits the tenant's bot instructions.
 
