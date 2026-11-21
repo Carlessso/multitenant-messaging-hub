@@ -12,6 +12,7 @@ export interface ProcessIncomingMessageDeps {
 export async function processIncomingMessage(
   job: IncomingMessageJob,
   deps: ProcessIncomingMessageDeps,
+  signal?: AbortSignal,
 ): Promise<void> {
   const inboundMessage = await deps.messageRepository.findByExternalId(
     job.tenantId,
@@ -23,10 +24,11 @@ export async function processIncomingMessage(
   }
 
   let text = '';
-  for await (const chunk of deps.llmProvider.generateReply(
-    inboundMessage.text,
-    inboundMessage.tenantId,
-  )) {
+  for await (const chunk of deps.llmProvider.generateReply({
+    text: inboundMessage.text,
+    tenantId: inboundMessage.tenantId,
+    signal,
+  })) {
     text += chunk;
   }
 

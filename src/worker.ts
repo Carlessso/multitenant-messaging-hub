@@ -59,7 +59,11 @@ const worker = new Worker<IncomingMessageJob>(
   INCOMING_MESSAGES_QUEUE,
   async (job) => {
     try {
-      await processIncomingMessage(job.data, { messageRepository, llmProvider });
+      await processIncomingMessage(
+        job.data,
+        { messageRepository, llmProvider },
+        AbortSignal.timeout(env.LLM_TIMEOUT_MS),
+      );
     } catch (err) {
       if (err instanceof PermanentJobError) {
         throw new UnrecoverableError(err.message);

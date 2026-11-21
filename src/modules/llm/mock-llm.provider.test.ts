@@ -8,7 +8,10 @@ describe('MockLLMProvider', () => {
     const clientMessage = 'Olá, boa tarde';
 
     const chunks: string[] = [];
-    for await (const chunk of llmProvider.generateReply(clientMessage)) {
+    for await (const chunk of llmProvider.generateReply({
+      text: clientMessage,
+      tenantId: 'loja-x',
+    })) {
       chunks.push(chunk);
     }
 

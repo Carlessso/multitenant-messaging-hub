@@ -1,3 +1,9 @@
+export interface GenerateReplyInput {
+  text: string;
+  tenantId: string;
+  signal?: AbortSignal;
+}
+
 export interface LLMProvider {
-  generateReply(clientMessage: string, tenantId: string): AsyncIterable<string>;
+  generateReply(input: GenerateReplyInput): AsyncIterable<string>;
 }

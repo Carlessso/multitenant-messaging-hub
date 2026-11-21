@@ -10,6 +10,7 @@ const envSchema = z
     LLM_PROVIDER: z.enum(['mock', 'gemini']).default('mock'),
     GEMINI_API_KEY: z.string().min(1).optional(),
     GEMINI_MODEL: z.string().default('gemini-3.8-flash'),
+    LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
   })
   .refine((env) => env.LLM_PROVIDER !== 'gemini' || env.GEMINI_API_KEY !== undefined, {
     message: 'GEMINI_API_KEY is required when LLM_PROVIDER is gemini',

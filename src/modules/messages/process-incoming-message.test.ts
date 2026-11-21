@@ -108,4 +108,23 @@ describe('process incoming messages', () => {
 
     await expect(processIncomingMessage(newJob, deps)).rejects.toThrow(PermanentJobError);
   });
+
+  it('aborts and saves no reply when the LLM exceeds the timeout', async () => {
+    await db.prisma.tenant.create({
+      data: {
+        id: tenantId,
+        name: 'Loja X',
+      },
+    });
+
+    await repo.save(inboundMessage);
+
+    const slowDeps = { ...deps, llmProvider: new MockLLMProvider(1_000) };
+
+    await expect(processIncomingMessage(job, slowDeps, AbortSignal.timeout(50))).rejects.toThrow();
+
+    const replies = await db.prisma.message.findMany({ where: { direction: 'outbound' } });
+
+    expect(replies).toHaveLength(0);
+  });
 });

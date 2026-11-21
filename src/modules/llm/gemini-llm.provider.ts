@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
-import type { LLMProvider } from './llm.provider.js';
+import type { GenerateReplyInput, LLMProvider } from './llm.provider.js';
 
 export class GeminiLLMProvider implements LLMProvider {
   private readonly ai: GoogleGenAI;
@@ -11,11 +11,12 @@ export class GeminiLLMProvider implements LLMProvider {
     this.ai = new GoogleGenAI({ apiKey });
   }
 
-  async *generateReply(clientMessage: string, tenantId: string): AsyncIterable<string> {
+  async *generateReply({ text, tenantId, signal }: GenerateReplyInput): AsyncIterable<string> {
     const stream = await this.ai.models.generateContentStream({
       model: this.model,
-      contents: clientMessage,
+      contents: text,
       config: {
+        abortSignal: signal,
         systemInstruction: [
           `You are the customer service assistant of the store "${tenantId}", replying to a customer on a messaging app.`,
           'Reply in the same language as the customer, in a friendly tone, in at most three short sentences.',
