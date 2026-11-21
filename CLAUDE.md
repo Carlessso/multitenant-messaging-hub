@@ -43,6 +43,8 @@ Multi-tenant messaging hub: receives WhatsApp/Instagram-style webhooks, persists
 - Applied migrations are immutable: fix mistakes with a new migration.
 - Job processors (e.g. `processIncomingMessage`) are plain functions with injected deps and know nothing about BullMQ; `worker.ts` adapts them to the queue. A processor throws `PermanentJobError` for failures that retrying cannot fix; the worker translates it to BullMQ's `UnrecoverableError`.
 - Jobs carry only identifiers (`tenantId`, `externalId`); the database is the source of truth. Idempotency is guaranteed by unique constraints, not by the queue's `jobId`.
+- LLM access goes through `LLMProvider.generateReply({ text, tenantId, signal })`, which returns an `AsyncIterable<string>`. Tests use `MockLLMProvider`; never call Gemini in tests. Every LLM call receives an `AbortSignal` (timeout from `LLM_TIMEOUT_MS`).
+- Reply chunks go worker → Redis pub/sub (`replies:<tenantId>`) → API → SSE. Publishing is best effort; SSE routes must clean up their listeners and timers on the response `close` event.
 
 ## Structure
 
@@ -52,7 +54,7 @@ src/
   server.ts     # API entrypoint: listen + graceful shutdown
   worker.ts     # worker entrypoint: consumes incoming-messages, retry, dead-letter queue, graceful shutdown
   config/       # env validation (Zod)
-  modules/      # one folder per feature (webhooks, messages, tenants): schemas, routes, repositories, queue, processors
+  modules/      # one folder per feature (webhooks, messages, tenants, llm, replies): schemas, routes, repositories, queue, processors
   shared/
     database/   # createPrismaClient()
     http/       # error handler + AppError classes
