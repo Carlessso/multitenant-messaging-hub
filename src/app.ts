@@ -11,6 +11,7 @@ import { BullMQMessageQueue } from './modules/messages/message.queue.js';
 import { RedisReplySubscriber } from './modules/replies/redis-reply-subscriber.js';
 import { replyRoutes } from './modules/replies/reply.routes.js';
 import { tenantRoutes } from './modules/tenants/tenant.routes.js';
+import { registerMetrics } from './shared/metrics/metrics.js';
 
 export interface AppOptions {
   databaseUrl: string;
@@ -35,6 +36,8 @@ export function buildApp(options: AppOptions): FastifyInstance {
     app.log.error({ err }, 'reply subscriber error');
   });
 
+  const metrics = registerMetrics(app, messageQueue);
+
   app.addHook('onClose', async () => {
     await prisma.$disconnect();
     await messageQueue.close();
@@ -53,7 +56,12 @@ export function buildApp(options: AppOptions): FastifyInstance {
     adminApiKey: options.adminApiKey,
   });
   app.register(messageRoutes, { prefix: '/tenants', messageRepository, tenantRepository });
-  app.register(replyRoutes, { prefix: '/tenants', tenantRepository, replySubscriber });
+  app.register(replyRoutes, {
+    prefix: '/tenants',
+    tenantRepository,
+    replySubscriber,
+    sseConnections: metrics.sseConnections,
+  });
 
   app.get('/health', async () => {
     return { status: 'ok' };

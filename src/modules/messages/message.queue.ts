@@ -15,15 +15,26 @@ export interface DeadLetterJob extends IncomingMessageJob {
   attemptsMade: number;
 }
 
+export interface QueueStats {
+  waiting: number;
+  active: number;
+  delayed: number;
+  failed: number;
+  deadLetter: number;
+}
+
 export interface MessageQueue {
   enqueue(job: IncomingMessageJob): Promise<void>;
+  getStats(): Promise<QueueStats>;
   close(): Promise<void>;
 }
 
 export class BullMQMessageQueue implements MessageQueue {
   private readonly queue: Queue<IncomingMessageJob>;
+  private readonly deadLetterQueue: Queue<DeadLetterJob>;
 
   constructor(redisUrl: string) {
+    this.deadLetterQueue = new Queue(INCOMING_MESSAGES_DLQ, { connection: { url: redisUrl } });
     this.queue = new Queue(INCOMING_MESSAGES_QUEUE, {
       connection: { url: redisUrl },
       defaultJobOptions: {
@@ -41,7 +52,22 @@ export class BullMQMessageQueue implements MessageQueue {
     });
   }
 
+  async getStats(): Promise<QueueStats> {
+    const [counts, deadLetter] = await Promise.all([
+      this.queue.getJobCounts('waiting', 'active', 'delayed', 'failed'),
+      this.deadLetterQueue.count(),
+    ]);
+
+    return {
+      waiting: counts['waiting'] ?? 0,
+      active: counts['active'] ?? 0,
+      delayed: counts['delayed'] ?? 0,
+      failed: counts['failed'] ?? 0,
+      deadLetter,
+    };
+  }
+
   async close(): Promise<void> {
-    await this.queue.close();
+    await Promise.all([this.queue.close(), this.deadLetterQueue.close()]);
   }
 }

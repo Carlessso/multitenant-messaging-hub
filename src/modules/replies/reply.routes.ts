@@ -3,6 +3,7 @@ import { tenantParamsSchema } from '../../shared/tenant.schema.js';
 import { NotFoundError } from '../../shared/http/errors.js';
 import type { TenantRepository } from '../tenants/tenant.repository.js';
 import { requireTenantApiKey } from '../tenants/tenant.auth.js';
+import type { ConnectionGauge } from '../../shared/metrics/metrics.js';
 import type { ReplySubscriber } from './reply.events.js';
 
 const HEARTBEAT_INTERVAL_MS = 15_000;
@@ -10,6 +11,7 @@ const HEARTBEAT_INTERVAL_MS = 15_000;
 export type ReplyRoutesOptions = {
   tenantRepository: TenantRepository;
   replySubscriber: ReplySubscriber;
+  sseConnections: ConnectionGauge;
 };
 
 export const replyRoutes: FastifyPluginAsyncZod<ReplyRoutesOptions> = async (app, options) => {
@@ -38,6 +40,7 @@ export const replyRoutes: FastifyPluginAsyncZod<ReplyRoutesOptions> = async (app
         response.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
       });
       response.write(': connected\n\n');
+      options.sseConnections.inc();
 
       const heartbeat = setInterval(() => {
         response.write(': ping\n\n');
@@ -45,6 +48,7 @@ export const replyRoutes: FastifyPluginAsyncZod<ReplyRoutesOptions> = async (app
 
       const cleanup = (): void => {
         clearInterval(heartbeat);
+        options.sseConnections.dec();
         unsubscribe().catch((err: unknown) => {
           request.log.error({ err }, 'failed to unsubscribe reply stream');
         });

@@ -10,8 +10,8 @@ Multi-tenant messaging hub: receives WhatsApp/Instagram-style webhooks, persists
 - BullMQ + Redis
 - LLM: Gemini behind an `LLMProvider` interface (mocked in tests)
 - Vitest + Testcontainers
-- Docker Compose, GitHub Actions
-- Pino (logs), OpenTelemetry/Prometheus (metrics)
+- Docker Compose, GitHub Actions (CI: format, lint, typecheck, tests)
+- Pino (logs), Prometheus via `prom-client` (`GET /metrics`)
 - ESLint with type-aware rules (`no-floating-promises`, `no-misused-promises`)
 
 ## Commands
@@ -44,6 +44,8 @@ Multi-tenant messaging hub: receives WhatsApp/Instagram-style webhooks, persists
 - Job processors (e.g. `processIncomingMessage`) are plain functions with injected deps and know nothing about BullMQ; `worker.ts` adapts them to the queue. A processor throws `PermanentJobError` for failures that retrying cannot fix; the worker translates it to BullMQ's `UnrecoverableError`.
 - Jobs carry only identifiers (`tenantId`, `externalId`); the database is the source of truth. Idempotency is guaranteed by unique constraints, not by the queue's `jobId`.
 - LLM access goes through `LLMProvider.generateReply({ text, tenantId, signal })`, which returns an `AsyncIterable<string>`. Tests use `MockLLMProvider`; never call Gemini in tests. Every LLM call receives an `AbortSignal` (timeout from `LLM_TIMEOUT_MS`).
+- Tenant routes are protected by `requireTenantApiKey` (a `preHandler` hook added inside each tenant-scoped plugin); `POST /tenants` by `requireAdminApiKey` (`ADMIN_API_KEY`). Only SHA-256 hashes of API keys are stored. The webhook is intentionally unauthenticated (simulated provider). Seeded dev keys: `hub_dev_<tenantId>`.
+- Metric labels use route templates (`request.routeOptions.url`), never raw URLs or ids.
 - Reply chunks go worker → Redis pub/sub (`replies:<tenantId>`) → API → SSE. Publishing is best effort; SSE routes must clean up their listeners and timers on the response `close` event.
 
 ## Structure
@@ -59,6 +61,7 @@ src/
     database/   # createPrismaClient()
     http/       # error handler + AppError classes
     jobs/       # job error classes (PermanentJobError)
+    metrics/    # Prometheus registry, HTTP/queue/SSE metrics, GET /metrics
   test/         # Testcontainers helpers (Postgres, Redis)
   generated/    # Prisma client (generated, gitignored)
 prisma/
@@ -67,7 +70,7 @@ prisma/
   seed.ts
 ```
 
-Standard error response: `{ "error": { "code", "message", "details"?, "requestId" } }` with codes `VALIDATION_ERROR`, `BAD_REQUEST`, `NOT_FOUND`, `TENANT_NOT_FOUND`, `INTERNAL_ERROR`.
+Standard error response: `{ "error": { "code", "message", "details"?, "requestId" } }` with codes `VALIDATION_ERROR`, `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `TENANT_NOT_FOUND`, `TENANT_ALREADY_EXISTS`, `INTERNAL_ERROR`.
 
 ## Roadmap
 
@@ -77,5 +80,5 @@ Standard error response: `{ "error": { "code", "message", "details"?, "requestId
 4. Tests with Vitest + Testcontainers
 5. BullMQ queue: async processing with retry, idempotency and dead-letter
 6. `LLMProvider` (Gemini + mock), auto-reply streamed via SSE
-7. Per-tenant API key auth, Pino logs, metrics, CI on GitHub Actions
+7. Per-tenant API key auth, Prometheus metrics, CI on GitHub Actions
 8. React chat UI: create tenants (`POST /tenants`), send messages as a fake customer through the webhook, and watch replies stream in via SSE
