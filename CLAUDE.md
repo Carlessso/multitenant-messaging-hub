@@ -81,6 +81,7 @@ web/            # React + Vite UI (own package.json, tsconfig and oxlint; ignore
   src/api/      # fetch client, types copied from the API (never import backend code), SSE reader
   src/components/ # TenantGate, ChatSimulator, ActivityPanel, Typewriter, BotSettings, About
 bin/            # setup, restart, stop: wrappers around docker compose
+docs/           # design decisions, API reference, development guide (README stays short)
 ```
 
 Standard error response: `{ "error": { "code", "message", "details"?, "requestId" } }` with codes `VALIDATION_ERROR`, `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `TENANT_NOT_FOUND`, `TENANT_ALREADY_EXISTS`, `INTERNAL_ERROR`.
