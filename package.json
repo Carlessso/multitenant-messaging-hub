@@ -23,6 +23,7 @@
     "start:worker": "node dist/worker.js"
   },
   "dependencies": {
+    "@google/genai": "^3.6.1",
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "bullmq": "^6.7.8",

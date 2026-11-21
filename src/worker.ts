@@ -12,13 +12,22 @@ import { Queue, UnrecoverableError, Worker, type Job } from 'bullmq';
 import { processIncomingMessage } from './modules/messages/process-incoming-message.js';
 import { PermanentJobError } from './shared/jobs/errors.js';
 import { MockLLMProvider } from './modules/llm/mock-llm.provider.js';
+import { GeminiLLMProvider } from './modules/llm/gemini-llm.provider.js';
+import type { LLMProvider } from './modules/llm/llm.provider.js';
 
 const logger = pino();
+
+function createLLMProvider(): LLMProvider {
+  if (env.LLM_PROVIDER === 'gemini' && env.GEMINI_API_KEY) {
+    return new GeminiLLMProvider(env.GEMINI_API_KEY, env.GEMINI_MODEL);
+  }
+  return new MockLLMProvider();
+}
 
 const prisma = createPrismaClient(env.DATABASE_URL);
 
 const messageRepository = new PrismaMessageRepository(prisma);
-const llmProvider = new MockLLMProvider();
+const llmProvider = createLLMProvider();
 
 const deadLetterQueue = new Queue<DeadLetterJob>(INCOMING_MESSAGES_DLQ, {
   connection: { url: env.REDIS_URL },
@@ -98,4 +107,4 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => void shutdown(signal));
 }
 
-logger.info('worker started');
+logger.info({ llmProvider: env.LLM_PROVIDER, model: env.GEMINI_MODEL }, 'worker started');
