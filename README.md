@@ -117,6 +117,16 @@ Then open **http://127.0.0.1:8080** and log in as `loja-x` with the API key `hub
 
 Services start in dependency order with health checks, every port is bound to `127.0.0.1` only, and `docker compose down` stops everything gracefully (`docker compose down -v` also wipes the data). The worker uses the mock LLM unless `LLM_PROVIDER=gemini` and `GEMINI_API_KEY` are set in a `.env` file next to `docker-compose.yml`. The admin key for creating tenants defaults to `local-admin-key-change-me` (override it with `ADMIN_API_KEY` in `.env`).
 
+| Command                             | Effect                                                         |
+| ----------------------------------- | -------------------------------------------------------------- |
+| `docker compose up --build -d`      | Build (if the code changed) and start everything in background |
+| `docker compose stop`               | Stop all containers, keeping them and the data                 |
+| `docker compose start`              | Start the stopped containers again                             |
+| `docker compose ps`                 | List the services and their health                             |
+| `docker compose logs -f api worker` | Follow the logs of some services                               |
+| `docker compose down`               | Stop and remove the containers (data volumes are kept)         |
+| `docker compose down -v`            | Same, and also wipe PostgreSQL and Redis data                  |
+
 ## Development
 
 Requirements: Node.js 26 (`nvm use`), Docker.
