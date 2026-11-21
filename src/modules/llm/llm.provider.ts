@@ -1,6 +1,11 @@
+export interface ReplyTenantContext {
+  name: string;
+  instructions: string | null;
+}
+
 export interface GenerateReplyInput {
   text: string;
-  tenantId: string;
+  tenant: ReplyTenantContext;
   signal?: AbortSignal;
 }
 

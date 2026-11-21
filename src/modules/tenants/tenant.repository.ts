@@ -4,13 +4,24 @@ export interface NewTenant {
   id: string;
   name: string;
   apiKeyHash: string;
+  botInstructions?: string | null;
+}
+
+export interface TenantProfile {
+  id: string;
+  name: string;
+  botInstructions: string | null;
 }
 
 export interface TenantRepository {
   exists(tenantId: string): Promise<boolean>;
+  findById(tenantId: string): Promise<TenantProfile | null>;
   findIdByApiKeyHash(apiKeyHash: string): Promise<string | null>;
   create(tenant: NewTenant): Promise<boolean>;
+  updateBotInstructions(tenantId: string, botInstructions: string | null): Promise<TenantProfile>;
 }
+
+const profileSelect = { id: true, name: true, botInstructions: true } as const;
 
 export class PrismaTenantRepository implements TenantRepository {
   constructor(private readonly prisma: PrismaClient) {}
@@ -21,6 +32,10 @@ export class PrismaTenantRepository implements TenantRepository {
       select: { id: true },
     });
     return tenant !== null;
+  }
+
+  async findById(tenantId: string): Promise<TenantProfile | null> {
+    return this.prisma.tenant.findUnique({ where: { id: tenantId }, select: profileSelect });
   }
 
   async findIdByApiKeyHash(apiKeyHash: string): Promise<string | null> {
@@ -41,5 +56,16 @@ export class PrismaTenantRepository implements TenantRepository {
       }
       throw error;
     }
+  }
+
+  async updateBotInstructions(
+    tenantId: string,
+    botInstructions: string | null,
+  ): Promise<TenantProfile> {
+    return this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { botInstructions },
+      select: profileSelect,
+    });
   }
 }

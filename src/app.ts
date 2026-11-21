@@ -11,6 +11,7 @@ import { BullMQMessageQueue } from './modules/messages/message.queue.js';
 import { RedisReplySubscriber } from './modules/replies/redis-reply-subscriber.js';
 import { replyRoutes } from './modules/replies/reply.routes.js';
 import { tenantRoutes } from './modules/tenants/tenant.routes.js';
+import { tenantSettingsRoutes } from './modules/tenants/tenant-settings.routes.js';
 import { registerMetrics } from './shared/metrics/metrics.js';
 
 export interface AppOptions {
@@ -55,6 +56,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
     tenantRepository,
     adminApiKey: options.adminApiKey,
   });
+  app.register(tenantSettingsRoutes, { prefix: '/tenants', tenantRepository });
   app.register(messageRoutes, { prefix: '/tenants', messageRepository, tenantRepository });
   app.register(replyRoutes, {
     prefix: '/tenants',

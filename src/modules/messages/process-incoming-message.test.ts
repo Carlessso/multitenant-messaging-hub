@@ -9,6 +9,8 @@ import type { Message } from './message.types.js';
 import type { IncomingMessageJob } from './message.queue.js';
 import { PermanentJobError } from '../../shared/jobs/errors.js';
 import { MockLLMProvider } from '../llm/mock-llm.provider.js';
+import type { GenerateReplyInput, LLMProvider } from '../llm/llm.provider.js';
+import { PrismaTenantRepository } from '../tenants/tenant.repository.js';
 import type { ReplyEvent, ReplyPublisher } from '../replies/reply.events.js';
 
 class InMemoryReplyPublisher implements ReplyPublisher {
@@ -21,8 +23,18 @@ class InMemoryReplyPublisher implements ReplyPublisher {
   async close(): Promise<void> {}
 }
 
+class SpyLLMProvider implements LLMProvider {
+  readonly inputs: GenerateReplyInput[] = [];
+
+  async *generateReply(input: GenerateReplyInput): AsyncIterable<string> {
+    this.inputs.push(input);
+    yield 'ok';
+  }
+}
+
 let db: TestDatabase;
 let repo: PrismaMessageRepository;
+let tenantRepository: PrismaTenantRepository;
 let deps: ProcessIncomingMessageDeps;
 let replyPublisher: InMemoryReplyPublisher;
 
@@ -49,12 +61,18 @@ beforeAll(async () => {
   db = await startTestDatabase();
 
   repo = new PrismaMessageRepository(db.prisma);
+  tenantRepository = new PrismaTenantRepository(db.prisma);
 }, 60_000);
 
 beforeEach(async () => {
   await resetDatabase(db.prisma);
   replyPublisher = new InMemoryReplyPublisher();
-  deps = { messageRepository: repo, llmProvider: new MockLLMProvider(0), replyPublisher };
+  deps = {
+    messageRepository: repo,
+    tenantRepository,
+    llmProvider: new MockLLMProvider(0),
+    replyPublisher,
+  };
 });
 
 afterAll(async () => {
@@ -62,6 +80,22 @@ afterAll(async () => {
 });
 
 describe('process incoming messages', () => {
+  it("sends the tenant's name and bot instructions to the LLM", async () => {
+    await db.prisma.tenant.create({
+      data: { id: tenantId, name: 'Loja X', botInstructions: 'Always be cordial.' },
+    });
+    await repo.save(inboundMessage);
+    const llmProvider = new SpyLLMProvider();
+
+    await processIncomingMessage(job, { ...deps, llmProvider });
+
+    expect(llmProvider.inputs).toHaveLength(1);
+    expect(llmProvider.inputs[0]).toMatchObject({
+      text: inboundMessage.text,
+      tenant: { name: 'Loja X', instructions: 'Always be cordial.' },
+    });
+  });
+
   it('creates an outbound reply linked to the inbound message', async () => {
     await db.prisma.tenant.create({
       data: {

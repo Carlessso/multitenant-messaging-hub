@@ -68,6 +68,19 @@ describe('POST /tenants', () => {
     expect(messages.statusCode).toBe(200);
   });
 
+  it('stores the optional bot instructions', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/tenants',
+      headers: { authorization: `Bearer ${adminApiKey}` },
+      payload: { id: 'loja-x', name: 'Loja X', botInstructions: 'Be cordial.' },
+    });
+
+    expect(response.statusCode).toBe(201);
+    const stored = await db.prisma.tenant.findUnique({ where: { id: 'loja-x' } });
+    expect(stored?.botInstructions).toBe('Be cordial.');
+  });
+
   it('returns 409 when the tenant already exists', async () => {
     await createTenantRequest(`Bearer ${adminApiKey}`);
 

@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
-import type { GenerateReplyInput, LLMProvider } from './llm.provider.js';
+import type { GenerateReplyInput, LLMProvider, ReplyTenantContext } from './llm.provider.js';
 
 export class GeminiLLMProvider implements LLMProvider {
   private readonly ai: GoogleGenAI;
@@ -11,17 +11,13 @@ export class GeminiLLMProvider implements LLMProvider {
     this.ai = new GoogleGenAI({ apiKey });
   }
 
-  async *generateReply({ text, tenantId, signal }: GenerateReplyInput): AsyncIterable<string> {
+  async *generateReply({ text, tenant, signal }: GenerateReplyInput): AsyncIterable<string> {
     const stream = await this.ai.models.generateContentStream({
       model: this.model,
       contents: text,
       config: {
         abortSignal: signal,
-        systemInstruction: [
-          `You are the customer service assistant of the store "${tenantId}", replying to a customer on a messaging app.`,
-          'Reply in the same language as the customer, in a friendly tone, in at most three short sentences.',
-          'If you do not know something specific about the store (prices, hours, stock), say that a team member will follow up instead of making it up.',
-        ].join(' '),
+        systemInstruction: buildSystemInstruction(tenant),
       },
     });
 
@@ -31,4 +27,17 @@ export class GeminiLLMProvider implements LLMProvider {
       }
     }
   }
+}
+
+export function buildSystemInstruction(tenant: ReplyTenantContext): string {
+  return [
+    `You are the customer service assistant of "${tenant.name}", replying to a customer on a messaging app.`,
+    tenant.instructions
+      ? `Instructions from the store owner:\n"""\n${tenant.instructions}\n"""`
+      : undefined,
+    'Always reply in the same language as the customer, in a friendly tone, in at most three short sentences.',
+    'Never make up prices, opening hours, stock or policies that are not stated above; say that a team member will follow up instead.',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 }

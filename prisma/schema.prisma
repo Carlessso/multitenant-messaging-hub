@@ -22,12 +22,13 @@ enum Direction {
 }
 
 model Tenant {
-  id            String         @id
-  name          String
-  apiKeyHash    String?        @unique @map("api_key_hash")
-  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  conversations Conversation[]
-  messages      Message[]
+  id              String         @id
+  name            String
+  apiKeyHash      String?        @unique @map("api_key_hash")
+  botInstructions String?        @map("bot_instructions")
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  conversations   Conversation[]
+  messages        Message[]
 
   @@map("tenants")
 }

@@ -1,5 +1,6 @@
 import { pino } from 'pino';
 import { PrismaMessageRepository } from './modules/messages/message.repository.js';
+import { PrismaTenantRepository } from './modules/tenants/tenant.repository.js';
 import { createPrismaClient } from './shared/database/prisma.js';
 import { env } from './config/env.js';
 import {
@@ -28,6 +29,7 @@ function createLLMProvider(): LLMProvider {
 const prisma = createPrismaClient(env.DATABASE_URL);
 
 const messageRepository = new PrismaMessageRepository(prisma);
+const tenantRepository = new PrismaTenantRepository(prisma);
 const llmProvider = createLLMProvider();
 const replyPublisher = new RedisReplyPublisher(env.REDIS_URL, (err) => {
   logger.error({ err }, 'reply publisher error');
@@ -65,7 +67,7 @@ const worker = new Worker<IncomingMessageJob>(
     try {
       await processIncomingMessage(
         job.data,
-        { messageRepository, llmProvider, replyPublisher },
+        { messageRepository, tenantRepository, llmProvider, replyPublisher },
         AbortSignal.timeout(env.LLM_TIMEOUT_MS),
       );
     } catch (err) {

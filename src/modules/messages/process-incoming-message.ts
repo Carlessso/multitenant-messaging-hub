@@ -1,12 +1,14 @@
 import { PermanentJobError } from '../../shared/jobs/errors.js';
 import type { LLMProvider } from '../llm/llm.provider.js';
 import type { ReplyPublisher } from '../replies/reply.events.js';
+import type { TenantRepository } from '../tenants/tenant.repository.js';
 import type { IncomingMessageJob } from './message.queue.js';
 import type { MessageRepository } from './message.repository.js';
 import type { Message } from './message.types.js';
 
 export interface ProcessIncomingMessageDeps {
   messageRepository: MessageRepository;
+  tenantRepository: TenantRepository;
   llmProvider: LLMProvider;
   replyPublisher: ReplyPublisher;
 }
@@ -25,10 +27,15 @@ export async function processIncomingMessage(
     throw new PermanentJobError(`Message ${job.externalId} from ${job.tenantId} not found`);
   }
 
+  const tenant = await deps.tenantRepository.findById(job.tenantId);
+  if (!tenant) {
+    throw new PermanentJobError(`Tenant ${job.tenantId} not found`);
+  }
+
   let text = '';
   for await (const chunk of deps.llmProvider.generateReply({
     text: inboundMessage.text,
-    tenantId: inboundMessage.tenantId,
+    tenant: { name: tenant.name, instructions: tenant.botInstructions },
     signal,
   })) {
     text += chunk;
@@ -44,7 +51,7 @@ export async function processIncomingMessage(
     tenantId: inboundMessage.tenantId,
     channel: inboundMessage.channel,
     from: inboundMessage.from,
-    text: text,
+    text,
     direction: 'outbound',
     sentAt: new Date(),
     receivedAt: new Date(),
