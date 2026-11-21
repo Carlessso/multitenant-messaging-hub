@@ -47,7 +47,7 @@ Multi-tenant messaging hub: receives WhatsApp/Instagram-style webhooks, persists
 - Applied migrations are immutable: fix mistakes with a new migration.
 - Job processors (e.g. `processIncomingMessage`) are plain functions with injected deps and know nothing about BullMQ; `worker.ts` adapts them to the queue. A processor throws `PermanentJobError` for failures that retrying cannot fix; the worker translates it to BullMQ's `UnrecoverableError`.
 - Jobs carry only identifiers (`tenantId`, `externalId`); the database is the source of truth. Idempotency is guaranteed by unique constraints, not by the queue's `jobId`.
-- LLM access goes through `LLMProvider.generateReply({ text, tenantId, signal })`, which returns an `AsyncIterable<string>`. Tests use `MockLLMProvider`; never call Gemini in tests. Every LLM call receives an `AbortSignal` (timeout from `LLM_TIMEOUT_MS`).
+- LLM access goes through `LLMProvider.generateReply({ text, history, tenant: { name, instructions }, signal })`, which returns an `AsyncIterable<string>`. Tests use `MockLLMProvider`; never call Gemini in tests. Every LLM call receives an `AbortSignal` (timeout from `LLM_TIMEOUT_MS`).
 - Tenant routes are protected by `requireTenantApiKey` (a `preHandler` hook added inside each tenant-scoped plugin); `POST /tenants` by `requireAdminApiKey` (`ADMIN_API_KEY`). Only SHA-256 hashes of API keys are stored. The webhook is intentionally unauthenticated (simulated provider). Seeded dev keys: `hub_dev_<tenantId>`.
 - The processor sends conversation history to the LLM: the last `HISTORY_LIMIT` (10) messages of the same conversation before the current one (`listConversationBefore`), mapped to `user`/`model` turns by `toGeminiContents`.
 - Bot instructions (`tenants.bot_instructions`, max 2000 chars) are loaded per job and placed before fixed guardrails in the Gemini system prompt (`buildSystemInstruction`).
@@ -79,7 +79,8 @@ prisma/
   seed.ts
 web/            # React + Vite UI (own package.json, tsconfig and oxlint; ignored by the root ESLint)
   src/api/      # fetch client, types copied from the API (never import backend code), SSE reader
-  src/components/ # TenantGate, ChatSimulator, BotSettings
+  src/components/ # TenantGate, ChatSimulator, ActivityPanel, Typewriter, BotSettings, About
+bin/            # setup, restart, stop: wrappers around docker compose
 ```
 
 Standard error response: `{ "error": { "code", "message", "details"?, "requestId" } }` with codes `VALIDATION_ERROR`, `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `TENANT_NOT_FOUND`, `TENANT_ALREADY_EXISTS`, `INTERNAL_ERROR`.
