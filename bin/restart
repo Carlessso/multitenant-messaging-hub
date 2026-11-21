@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Rebuilds what changed and recreates the containers, so code and .env changes take effect.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+docker compose up --build --detach --force-recreate --wait
+echo "Restarted. Web UI: http://127.0.0.1:8080"

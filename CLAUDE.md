@@ -24,6 +24,7 @@ Multi-tenant messaging hub: receives WhatsApp/Instagram-style webhooks, persists
 - `npm run format` / `npm run format:check`: Prettier
 - `npm run build` / `npm start` / `npm run start:worker`: compile to `dist/` and run the API / worker with plain Node
 - `npm test`: Vitest (Docker must be running for Testcontainers)
+- `bin/setup` / `bin/restart` / `bin/stop [--wipe]`: wrappers to start (creates `.env` if missing, waits for health checks), rebuild + recreate, and stop the Docker stack
 - `docker compose up --build`: full stack in containers (postgres, redis, one-shot `migrate` + seed, api on `127.0.0.1:3000`, worker, web/nginx on `127.0.0.1:8080`)
 - `docker compose stop` / `start` / `down` (`down -v` wipes data) / `logs -f <service>`: manage the stack
 - `docker compose up -d postgres redis`: only the infrastructure, for local development with `npm run dev` (the full stack also binds port 3000)

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Stops the stack. Data is kept unless --wipe is given.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+case "${1:-}" in
+  "")
+    docker compose stop
+    echo "Stopped. Data is kept; bin/setup starts everything again."
+    ;;
+  --wipe)
+    docker compose down --volumes
+    echo "Removed the containers and the PostgreSQL and Redis data."
+    ;;
+  *)
+    echo "Usage: bin/stop [--wipe]" >&2
+    exit 1
+    ;;
+esac
