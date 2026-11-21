@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { ApiError, api } from '../api/client.ts';
+import { onHttpLog } from '../api/http-log.ts';
 import { streamReplies } from '../api/reply-stream.ts';
 import type { Channel, Customer, Message, ReplyEvent, Session } from '../api/types.ts';
+import {
+  addTimelineEntry,
+  MAX_WIRE_ENTRIES,
+  type MessageTimeline,
+  type WireEntry,
+} from '../activity.ts';
+import { ActivityPanel } from './ActivityPanel.tsx';
 
 interface ChatSimulatorProps {
   session: Session;
@@ -44,7 +52,28 @@ export function ChatSimulator({ session }: ChatSimulatorProps) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [timelines, setTimelines] = useState<MessageTimeline[]>([]);
+  const [wire, setWire] = useState<WireEntry[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<Message[]>([]);
+  const wireSeq = useRef(0);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  const pushWire = useCallback((entry: WireEntry) => {
+    setWire((current) => [entry, ...current].slice(0, MAX_WIRE_ENTRIES));
+  }, []);
+
+  useEffect(
+    () =>
+      onHttpLog((entry) => {
+        wireSeq.current += 1;
+        pushWire({ id: wireSeq.current, kind: 'http', ...entry });
+      }),
+    [pushWire],
+  );
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS);
@@ -63,12 +92,40 @@ export function ChatSimulator({ session }: ChatSimulatorProps) {
     const controller = new AbortController();
 
     const handleEvent = (event: ReplyEvent) => {
+      wireSeq.current += 1;
+      pushWire({ id: wireSeq.current, kind: 'sse', at: new Date().toISOString(), event });
+
+      if (event.type === 'status') {
+        setTimelines((current) =>
+          addTimelineEntry(current, event.externalId, {
+            stage: event.stage,
+            source: event.source,
+            at: event.at,
+            detail: event.detail,
+          }),
+        );
+        return;
+      }
+
       setStreaming((current) => ({
         ...current,
         [event.replyToId]:
           event.type === 'done' ? event.text : (current[event.replyToId] ?? '') + event.text,
       }));
+
       if (event.type === 'done') {
+        const inbound = messagesRef.current.find((message) => message.id === event.replyToId);
+        if (inbound?.externalId) {
+          const externalId = inbound.externalId;
+          setTimelines((current) =>
+            addTimelineEntry(current, externalId, {
+              stage: 'delivered',
+              source: 'browser',
+              at: new Date().toISOString(),
+              detail: { characters: event.text.length },
+            }),
+          );
+        }
         void reload();
       }
     };
@@ -93,7 +150,7 @@ export function ChatSimulator({ session }: ChatSimulatorProps) {
 
     void run();
     return () => controller.abort();
-  }, [session, reload]);
+  }, [session, reload, pushWire]);
 
   const conversation = useMemo(
     () =>
@@ -135,8 +192,26 @@ export function ChatSimulator({ session }: ChatSimulatorProps) {
 
     setSending(true);
     setError(null);
+    const externalId = `sim.${crypto.randomUUID()}`;
+    setTimelines((current) =>
+      addTimelineEntry(
+        current,
+        externalId,
+        { stage: 'sent', source: 'browser', at: new Date().toISOString() },
+        text,
+      ),
+    );
     try {
-      await api.sendCustomerMessage(session.tenantId, customer, text);
+      const startedAt = performance.now();
+      await api.sendCustomerMessage(session.tenantId, customer, text, externalId);
+      setTimelines((current) =>
+        addTimelineEntry(current, externalId, {
+          stage: 'accepted',
+          source: 'browser',
+          at: new Date().toISOString(),
+          detail: { status: 202, roundTripMs: Math.round(performance.now() - startedAt) },
+        }),
+      );
       setDraft('');
       await reload();
     } catch (caught) {
@@ -271,6 +346,8 @@ export function ChatSimulator({ session }: ChatSimulatorProps) {
           </button>
         </form>
       </div>
+
+      <ActivityPanel timelines={timelines} wire={wire} />
     </section>
   );
 }

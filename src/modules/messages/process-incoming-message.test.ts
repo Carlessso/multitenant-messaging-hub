@@ -119,6 +119,59 @@ describe('process incoming messages', () => {
     expect(replies[0]?.text).toBe(`Echo: ${inboundMessage.text}`);
   });
 
+  it('sends the earlier messages of the same conversation as history', async () => {
+    await db.prisma.tenant.create({ data: { id: tenantId, name: 'Loja X' } });
+    const earlierQuestion: Message = {
+      ...inboundMessage,
+      id: crypto.randomUUID(),
+      externalId: 'wamid.earlier',
+      text: 'Tem pão?',
+      receivedAt: new Date('2026-11-18T14:00:00.000Z'),
+    };
+    await repo.save(earlierQuestion);
+    await repo.save({
+      ...earlierQuestion,
+      id: crypto.randomUUID(),
+      externalId: undefined,
+      direction: 'outbound',
+      text: 'Sai às 6h e às 16h.',
+      receivedAt: new Date('2026-11-18T14:00:05.000Z'),
+      replyToId: earlierQuestion.id,
+    });
+    await repo.save({
+      ...inboundMessage,
+      id: crypto.randomUUID(),
+      externalId: 'wamid.other-contact',
+      from: { id: '5511888888888' },
+      text: 'Other customer',
+      receivedAt: new Date('2026-11-18T14:10:00.000Z'),
+    });
+    await repo.save(inboundMessage);
+    const llmProvider = new SpyLLMProvider();
+
+    await processIncomingMessage(job, { ...deps, llmProvider });
+
+    expect(llmProvider.inputs[0]?.history).toEqual([
+      { role: 'customer', text: 'Tem pão?' },
+      { role: 'assistant', text: 'Sai às 6h e às 16h.' },
+    ]);
+  });
+
+  it('publishes the pipeline stages with timings', async () => {
+    await db.prisma.tenant.create({ data: { id: tenantId, name: 'Loja X' } });
+    await repo.save(inboundMessage);
+
+    await processIncomingMessage(job, deps);
+
+    const statuses = replyPublisher.events.flatMap((event) =>
+      event.type === 'status' ? [event] : [],
+    );
+    expect(statuses.map((event) => event.stage)).toEqual(['generating', 'first_token', 'saved']);
+    expect(statuses.every((event) => event.externalId === job.externalId)).toBe(true);
+    expect(statuses[1]?.detail).toMatchObject({ latencyMs: expect.any(Number) as number });
+    expect(statuses[2]?.detail).toMatchObject({ chunks: expect.any(Number) as number });
+  });
+
   it('publishes each chunk and then a done event with the full text', async () => {
     await db.prisma.tenant.create({
       data: {

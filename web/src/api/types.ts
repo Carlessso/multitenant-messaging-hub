@@ -13,11 +13,18 @@ export interface Message {
   replyToId?: string;
 }
 
-export interface ReplyEvent {
-  type: 'chunk' | 'done';
-  replyToId: string;
-  text: string;
-}
+export type StatusDetail = Record<string, string | number | boolean>;
+
+export type ReplyEvent =
+  | { type: 'chunk' | 'done'; replyToId: string; text: string }
+  | {
+      type: 'status';
+      externalId: string;
+      stage: string;
+      source: 'api' | 'worker';
+      at: string;
+      detail?: StatusDetail;
+    };
 
 export interface TenantProfile {
   id: string;

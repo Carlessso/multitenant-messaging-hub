@@ -9,6 +9,7 @@ import { createPrismaClient } from './shared/database/prisma.js';
 import { PrismaTenantRepository } from './modules/tenants/tenant.repository.js';
 import { BullMQMessageQueue } from './modules/messages/message.queue.js';
 import { RedisReplySubscriber } from './modules/replies/redis-reply-subscriber.js';
+import { RedisReplyPublisher } from './modules/replies/redis-reply-publisher.js';
 import { replyRoutes } from './modules/replies/reply.routes.js';
 import { tenantRoutes } from './modules/tenants/tenant.routes.js';
 import { tenantSettingsRoutes } from './modules/tenants/tenant-settings.routes.js';
@@ -36,6 +37,9 @@ export function buildApp(options: AppOptions): FastifyInstance {
   const replySubscriber = new RedisReplySubscriber(options.redisUrl, (err) => {
     app.log.error({ err }, 'reply subscriber error');
   });
+  const replyPublisher = new RedisReplyPublisher(options.redisUrl, (err) => {
+    app.log.error({ err }, 'reply publisher error');
+  });
 
   const metrics = registerMetrics(app, messageQueue);
 
@@ -43,6 +47,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
     await prisma.$disconnect();
     await messageQueue.close();
     await replySubscriber.close();
+    await replyPublisher.close();
   });
 
   app.register(webhookRoutes, {
@@ -50,6 +55,7 @@ export function buildApp(options: AppOptions): FastifyInstance {
     tenantRepository,
     messageRepository,
     messageQueue,
+    replyPublisher,
   });
   app.register(tenantRoutes, {
     prefix: '/tenants',

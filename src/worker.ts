@@ -16,6 +16,7 @@ import { MockLLMProvider } from './modules/llm/mock-llm.provider.js';
 import { GeminiLLMProvider } from './modules/llm/gemini-llm.provider.js';
 import type { LLMProvider } from './modules/llm/llm.provider.js';
 import { RedisReplyPublisher } from './modules/replies/redis-reply-publisher.js';
+import { statusEvent } from './modules/replies/reply.events.js';
 
 const logger = pino();
 
@@ -39,6 +40,14 @@ const deadLetterQueue = new Queue<DeadLetterJob>(INCOMING_MESSAGES_DLQ, {
   connection: { url: env.REDIS_URL },
 });
 
+function nextRetryDelayMs(job: Job<IncomingMessageJob>): number | undefined {
+  const { backoff } = job.opts;
+  if (typeof backoff !== 'object' || backoff.type !== 'exponential') {
+    return undefined;
+  }
+  return (backoff.delay ?? 0) * 2 ** (job.attemptsMade - 1);
+}
+
 function isFinalFailure(job: Job<IncomingMessageJob>, err: Error): boolean {
   return err instanceof UnrecoverableError || job.attemptsMade >= (job.opts.attempts ?? 1);
 }
@@ -56,6 +65,10 @@ async function moveToDeadLetter(job: Job<IncomingMessageJob>, err: Error): Promi
       { jobId: job.id },
     );
     logger.warn({ jobId: job.id }, 'job moved to dead-letter queue');
+    await replyPublisher.publish(
+      job.data.tenantId,
+      statusEvent(job.data.externalId, 'dead_lettered', 'worker', { reason: err.message }),
+    );
   } catch (dlqErr) {
     logger.error({ jobId: job.id, err: dlqErr }, 'failed to move job to dead-letter queue');
   }
@@ -64,6 +77,15 @@ async function moveToDeadLetter(job: Job<IncomingMessageJob>, err: Error): Promi
 const worker = new Worker<IncomingMessageJob>(
   INCOMING_MESSAGES_QUEUE,
   async (job) => {
+    await replyPublisher.publish(
+      job.data.tenantId,
+      statusEvent(job.data.externalId, 'processing', 'worker', {
+        attempt: job.attemptsMade + 1,
+        maxAttempts: job.opts.attempts ?? 1,
+        waitedMs: Date.now() - job.timestamp,
+      }),
+    );
+
     try {
       await processIncomingMessage(
         job.data,
@@ -90,7 +112,24 @@ worker.on('failed', (job, err) => {
     'job failed',
   );
 
-  if (job && isFinalFailure(job, err)) {
+  if (!job) {
+    return;
+  }
+
+  const final = isFinalFailure(job, err);
+  const retryInMs = final ? undefined : nextRetryDelayMs(job);
+  void replyPublisher.publish(
+    job.data.tenantId,
+    statusEvent(job.data.externalId, 'failed', 'worker', {
+      attempt: job.attemptsMade,
+      maxAttempts: job.opts.attempts ?? 1,
+      error: err.message,
+      final,
+      ...(retryInMs === undefined ? {} : { retryInMs }),
+    }),
+  );
+
+  if (final) {
     void moveToDeadLetter(job, err);
   }
 });

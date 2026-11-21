@@ -3,8 +3,14 @@ export interface ReplyTenantContext {
   instructions: string | null;
 }
 
+export interface ConversationTurn {
+  role: 'customer' | 'assistant';
+  text: string;
+}
+
 export interface GenerateReplyInput {
   text: string;
+  history: ConversationTurn[];
   tenant: ReplyTenantContext;
   signal?: AbortSignal;
 }

@@ -24,7 +24,7 @@ export interface QueueStats {
 }
 
 export interface MessageQueue {
-  enqueue(job: IncomingMessageJob): Promise<void>;
+  enqueue(job: IncomingMessageJob): Promise<string>;
   getStats(): Promise<QueueStats>;
   close(): Promise<void>;
 }
@@ -46,10 +46,10 @@ export class BullMQMessageQueue implements MessageQueue {
     });
   }
 
-  async enqueue(job: IncomingMessageJob): Promise<void> {
-    await this.queue.add('process-message', job, {
-      jobId: `${job.tenantId}_${encodeURIComponent(job.externalId)}`,
-    });
+  async enqueue(job: IncomingMessageJob): Promise<string> {
+    const jobId = `${job.tenantId}_${encodeURIComponent(job.externalId)}`;
+    await this.queue.add('process-message', job, { jobId });
+    return jobId;
   }
 
   async getStats(): Promise<QueueStats> {

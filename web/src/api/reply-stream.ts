@@ -1,4 +1,5 @@
 import { ApiError, authHeaders } from './client.ts';
+import { loggedFetch } from './http-log.ts';
 import type { ReplyEvent, Session } from './types.ts';
 
 export async function* streamReplies(
@@ -6,7 +7,7 @@ export async function* streamReplies(
   signal: AbortSignal,
   onOpen?: () => void,
 ): AsyncGenerator<ReplyEvent> {
-  const response = await fetch(`/tenants/${session.tenantId}/replies/stream`, {
+  const response = await loggedFetch(`/tenants/${session.tenantId}/replies/stream`, {
     headers: authHeaders(session.apiKey),
     signal,
   });

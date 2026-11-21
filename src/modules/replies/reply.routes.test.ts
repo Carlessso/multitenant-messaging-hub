@@ -94,4 +94,34 @@ describe('GET /tenants/:tenantId/replies/stream', () => {
     );
     expect(received).not.toContain('msg-2');
   });
+
+  it('streams the received and enqueued stages when a webhook arrives', async () => {
+    const apiKey = await createTenant(db.prisma, 'loja-x');
+
+    const controller = new AbortController();
+    const response = await fetch(`${baseUrl}/tenants/loja-x/replies/stream`, {
+      headers: { authorization: `Bearer ${apiKey}` },
+      signal: controller.signal,
+    });
+    const reader = response.body!.getReader();
+    await readUntil(reader, ': connected');
+
+    await app.inject({
+      method: 'POST',
+      url: '/webhooks/loja-x',
+      payload: {
+        externalId: 'sim.pipeline-1',
+        channel: 'whatsapp',
+        from: { id: '5511999999999' },
+        text: 'Oi',
+        sentAt: '2026-11-21T10:00:00.000Z',
+      },
+    });
+
+    const received = await readUntil(reader, '"stage":"enqueued"');
+    controller.abort();
+
+    expect(received).toMatch(/"externalId":"sim\.pipeline-1","stage":"received","source":"api"/);
+    expect(received).toContain('"jobId":"loja-x_sim.pipeline-1"');
+  });
 });

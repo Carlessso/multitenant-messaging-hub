@@ -6,11 +6,13 @@ import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import type { TenantRepository } from '../tenants/tenant.repository.js';
 import { NotFoundError } from '../../shared/http/errors.js';
 import type { MessageQueue } from '../messages/message.queue.js';
+import { statusEvent, type ReplyPublisher } from '../replies/reply.events.js';
 
 export type WebhookRoutesOptions = {
   messageRepository: MessageRepository;
   tenantRepository: TenantRepository;
   messageQueue: MessageQueue;
+  replyPublisher: ReplyPublisher;
 };
 
 export const webhookRoutes: FastifyPluginAsyncZod<WebhookRoutesOptions> = async (app, options) => {
@@ -35,11 +37,20 @@ export const webhookRoutes: FastifyPluginAsyncZod<WebhookRoutesOptions> = async 
         receivedAt: new Date(),
       };
 
+      const { tenantId } = request.params;
+      const { externalId } = request.body;
+
       await options.messageRepository.save(message);
-      await options.messageQueue.enqueue({
-        tenantId: request.params.tenantId,
-        externalId: request.body.externalId,
-      });
+      await options.replyPublisher.publish(
+        tenantId,
+        statusEvent(externalId, 'received', 'api', { channel: request.body.channel }),
+      );
+
+      const jobId = await options.messageQueue.enqueue({ tenantId, externalId });
+      await options.replyPublisher.publish(
+        tenantId,
+        statusEvent(externalId, 'enqueued', 'api', { jobId }),
+      );
 
       reply.code(202);
       return { received: true };

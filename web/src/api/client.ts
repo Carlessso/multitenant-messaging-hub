@@ -1,3 +1,4 @@
+import { loggedFetch } from './http-log.ts';
 import type { CreatedTenant, Customer, Message, Session, TenantProfile } from './types.ts';
 
 export class ApiError extends Error {
@@ -27,7 +28,7 @@ export function authHeaders(apiKey: string | undefined): Record<string, string> 
 }
 
 async function request<T>(path: string, { method = 'GET', apiKey, body }: RequestOptions = {}) {
-  const response = await fetch(path, {
+  const response = await loggedFetch(path, {
     method,
     headers: {
       ...authHeaders(apiKey),
@@ -83,11 +84,16 @@ export const api = {
     return response.data;
   },
 
-  sendCustomerMessage(tenantId: string, customer: Customer, text: string) {
-    return request<{ received: boolean }>(`/webhooks/${tenantId}`, {
+  async sendCustomerMessage(
+    tenantId: string,
+    customer: Customer,
+    text: string,
+    externalId: string,
+  ) {
+    await request<{ received: boolean }>(`/webhooks/${tenantId}`, {
       method: 'POST',
       body: {
-        externalId: `sim.${crypto.randomUUID()}`,
+        externalId,
         channel: customer.channel,
         from: { id: customer.id, name: customer.name || undefined },
         text,

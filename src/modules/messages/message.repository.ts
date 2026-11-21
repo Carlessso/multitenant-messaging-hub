@@ -5,6 +5,7 @@ export interface MessageRepository {
   save(message: Message): Promise<void>;
   listByTenant(tenantId: string): Promise<Message[]>;
   findByExternalId(tenantId: string, externalId: string): Promise<Message | null>;
+  listConversationBefore(message: Message, limit: number): Promise<Message[]>;
 }
 
 export class PrismaMessageRepository implements MessageRepository {
@@ -74,6 +75,21 @@ export class PrismaMessageRepository implements MessageRepository {
     });
 
     return row ? toEntity(row) : null;
+  }
+
+  async listConversationBefore(message: Message, limit: number): Promise<Message[]> {
+    const rows = await this.prisma.message.findMany({
+      where: {
+        tenantId: message.tenantId,
+        receivedAt: { lt: message.receivedAt },
+        conversation: { channel: message.channel, contactId: message.from.id },
+      },
+      orderBy: { receivedAt: 'desc' },
+      take: limit,
+      include: { conversation: true },
+    });
+
+    return rows.reverse().map(toEntity);
   }
 }
 
